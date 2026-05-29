@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CLEAR Accessibility Coach — Montgomery College CTL</title>
+    <meta name="ctl-email" content="{{ ctl_email }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <header class="site-header" role="banner">
+        <div class="container">
+            <h1 class="site-title">CLEAR Accessibility Coach</h1>
+            <p class="site-subtitle">Montgomery College Center for Teaching and Learning</p>
+        </div>
+    </header>
+    <main id="main-content" class="container" role="main">
+        {% block content %}{% endblock %}
+    </main>
+    <footer class="site-footer" role="contentinfo">
+        <div class="container">
+            <p>{{ framework_citation }}</p>
+            <p>Need help? <a href="https://pressbooks.montgomerycollege.edu/clear/">Review the CLEAR Pressbook</a> or contact the <a href="mailto:{{ ctl_email }}">Center for Teaching and Learning</a>.</p>
+        </div>
+    </footer>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
