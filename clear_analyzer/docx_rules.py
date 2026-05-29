@@ -1,7 +1,22 @@
+import re
 from io import BytesIO
 from docx import Document
 from docx.oxml.ns import qn
 from .models import Finding
+
+_IMAGE_EXT_RE = re.compile(
+    r"^.+\.(png|jpg|jpeg|gif|bmp|tiff|tif|svg|webp|ico|emf|wmf)$",
+    re.IGNORECASE,
+)
+_WEAK_ALT_PATTERNS = [
+    re.compile(r"^image\s*\d*$", re.IGNORECASE),
+    re.compile(r"^picture\s*\d*$", re.IGNORECASE),
+    re.compile(r"^photo\s*\d*$", re.IGNORECASE),
+    re.compile(r"^img[_\s]?\d*$", re.IGNORECASE),
+    re.compile(r"^screenshot", re.IGNORECASE),
+    re.compile(r"^graphic\s*\d*$", re.IGNORECASE),
+    re.compile(r"^chart\s*\d*$", re.IGNORECASE),
+]
 
 
 def analyze_docx(file_bytes: bytes) -> list[Finding]:
@@ -91,6 +106,39 @@ def _find_images_in_element(element):
     return images
 
 
+def _evaluate_alt_text(img, location, findings):
+    """Evaluate an image's alt text and add findings if problematic."""
+    if img["decorative"]:
+        return
+    alt = img["alt_text"]
+    name = img["name"]
+
+    if not alt:
+        findings.append(Finding(
+            strand="A",
+            severity="critical",
+            location=location,
+            issue="Image is missing alt text.",
+            evidence=f"Image: {name}",
+        ))
+    elif _IMAGE_EXT_RE.match(alt):
+        findings.append(Finding(
+            strand="A",
+            severity="critical",
+            location=location,
+            issue="Image alt text is a filename, not a meaningful description.",
+            evidence=f"Image: {name}, alt text: \"{alt}\"",
+        ))
+    elif any(p.match(alt) for p in _WEAK_ALT_PATTERNS):
+        findings.append(Finding(
+            strand="A",
+            severity="warning",
+            location=location,
+            issue="Image alt text appears to be generic or auto-generated. Consider a description of what the image conveys.",
+            evidence=f"Image: {name}, alt text: \"{alt}\"",
+        ))
+
+
 def _check_images(doc, findings):
     """Check all images in the document body, headers, and footers."""
     image_count = 0
@@ -100,16 +148,7 @@ def _check_images(doc, findings):
         images = _find_images_in_element(para._element)
         for img in images:
             image_count += 1
-            if img["decorative"]:
-                continue
-            if not img["alt_text"]:
-                findings.append(Finding(
-                    strand="A",
-                    severity="critical",
-                    location=f"Paragraph {para_idx}",
-                    issue="Image is missing alt text.",
-                    evidence=f"Image: {img['name']}",
-                ))
+            _evaluate_alt_text(img, f"Paragraph {para_idx}", findings)
 
     # Check images inside tables
     for tbl_idx, table in enumerate(doc.tables, 1):
@@ -118,16 +157,7 @@ def _check_images(doc, findings):
                 images = _find_images_in_element(cell._element)
                 for img in images:
                     image_count += 1
-                    if img["decorative"]:
-                        continue
-                    if not img["alt_text"]:
-                        findings.append(Finding(
-                            strand="A",
-                            severity="critical",
-                            location=f"Table {tbl_idx}, Row {row_idx}, Cell {cell_idx}",
-                            issue="Image inside a table cell is missing alt text.",
-                            evidence=f"Image: {img['name']}",
-                        ))
+                    _evaluate_alt_text(img, f"Table {tbl_idx}, Row {row_idx}, Cell {cell_idx}", findings)
 
     # Check headers and footers
     for section in doc.sections:
@@ -141,16 +171,7 @@ def _check_images(doc, findings):
                         images = _find_images_in_element(para._element)
                         for img in images:
                             image_count += 1
-                            if img["decorative"]:
-                                continue
-                            if not img["alt_text"]:
-                                findings.append(Finding(
-                                    strand="A",
-                                    severity="critical",
-                                    location=header_footer_name,
-                                    issue=f"Image in the document {header_footer_name.lower()} is missing alt text.",
-                                    evidence=f"Image: {img['name']}",
-                                ))
+                            _evaluate_alt_text(img, header_footer_name, findings)
                 except Exception:
                     pass
 

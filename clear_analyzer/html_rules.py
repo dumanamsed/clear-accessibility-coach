@@ -2,6 +2,20 @@ import re
 from bs4 import BeautifulSoup
 from .models import Finding
 
+_IMAGE_EXT_RE = re.compile(
+    r"^.+\.(png|jpg|jpeg|gif|bmp|tiff|tif|svg|webp|ico|emf|wmf)$",
+    re.IGNORECASE,
+)
+_WEAK_ALT_PATTERNS = [
+    re.compile(r"^image\s*\d*$", re.IGNORECASE),
+    re.compile(r"^picture\s*\d*$", re.IGNORECASE),
+    re.compile(r"^photo\s*\d*$", re.IGNORECASE),
+    re.compile(r"^img[_\s]?\d*$", re.IGNORECASE),
+    re.compile(r"^screenshot", re.IGNORECASE),
+    re.compile(r"^graphic\s*\d*$", re.IGNORECASE),
+    re.compile(r"^chart\s*\d*$", re.IGNORECASE),
+]
+
 
 def analyze_html(content: str) -> list[Finding]:
     findings = []
@@ -36,16 +50,33 @@ def analyze_text(content: str) -> list[Finding]:
 def _check_images(soup, findings):
     for i, img in enumerate(soup.find_all("img"), 1):
         alt = img.get("alt")
+        src = img.get("src", "unknown source")
+        if len(src) > 80:
+            src = src[:77] + "..."
+
         if alt is None or alt.strip() == "":
-            src = img.get("src", "unknown source")
-            if len(src) > 80:
-                src = src[:77] + "..."
             findings.append(Finding(
                 strand="A",
                 severity="critical",
                 location=f"Image {i}",
                 issue="Image is missing alt text or has an empty alt attribute.",
                 evidence=f"<img src=\"{src}\">",
+            ))
+        elif _IMAGE_EXT_RE.match(alt.strip()):
+            findings.append(Finding(
+                strand="A",
+                severity="critical",
+                location=f"Image {i}",
+                issue="Image alt text is a filename, not a meaningful description.",
+                evidence=f"alt=\"{alt.strip()}\", src=\"{src}\"",
+            ))
+        elif any(p.match(alt.strip()) for p in _WEAK_ALT_PATTERNS):
+            findings.append(Finding(
+                strand="A",
+                severity="warning",
+                location=f"Image {i}",
+                issue="Image alt text appears to be generic or auto-generated. Consider a description of what the image conveys.",
+                evidence=f"alt=\"{alt.strip()}\", src=\"{src}\"",
             ))
 
 

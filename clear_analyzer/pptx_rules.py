@@ -1,16 +1,29 @@
+import re
 from io import BytesIO
 from pptx import Presentation
 from pptx.util import Pt
 from pptx.enum.shapes import MSO_SHAPE_TYPE
-from lxml import etree
 from .models import Finding
 
-# All namespaces used in PPTX XML
-NSMAP = {
-    "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
-    "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
-    "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
-}
+# Common image file extensions
+_IMAGE_EXT_RE = re.compile(
+    r"^.+\.(png|jpg|jpeg|gif|bmp|tiff|tif|svg|webp|ico|emf|wmf)$",
+    re.IGNORECASE,
+)
+
+# Patterns that indicate auto-generated or meaningless alt text
+_WEAK_ALT_PATTERNS = [
+    re.compile(r"^image\s*\d*$", re.IGNORECASE),          # "image", "Image1"
+    re.compile(r"^picture\s*\d*$", re.IGNORECASE),         # "picture", "Picture 2"
+    re.compile(r"^photo\s*\d*$", re.IGNORECASE),           # "photo"
+    re.compile(r"^img[_\s]?\d*$", re.IGNORECASE),          # "img_1", "img 2"
+    re.compile(r"^screenshot", re.IGNORECASE),             # "screenshot..."
+    re.compile(r"^graphic\s*\d*$", re.IGNORECASE),         # "graphic"
+    re.compile(r"^chart\s*\d*$", re.IGNORECASE),           # "chart 1"
+    re.compile(r"^figure\s*\d*$", re.IGNORECASE),          # "figure"
+    re.compile(r"^slide\s*\d+", re.IGNORECASE),            # "Slide 1"
+    re.compile(r"^content placeholder", re.IGNORECASE),    # PowerPoint default
+]
 
 
 def analyze_pptx(file_bytes: bytes) -> list[Finding]:
@@ -85,7 +98,12 @@ def _check_shape_for_image(shape, loc, findings, seen_shapes):
         is_image = True
 
     # Placeholder with an image fill
-    if not is_image and hasattr(shape, "placeholder_format") and shape.placeholder_format is not None:
+    if not is_image:
+      try:
+        is_placeholder = shape.placeholder_format is not None
+      except ValueError:
+        is_placeholder = False
+      if is_placeholder:
         el = shape._element
         blipFills = list(el.iter("{http://schemas.openxmlformats.org/drawingml/2006/main}blipFill"))
         if blipFills:
@@ -117,14 +135,33 @@ def _check_shape_for_image(shape, loc, findings, seen_shapes):
         # Marked as decorative — this is correct, no finding needed
         return
 
+    name = shape.name or "Image"
+
     if not alt_text:
-        name = shape.name or "Image"
         findings.append(Finding(
             strand="A",
             severity="critical",
             location=loc,
             issue="Image is missing alt text.",
             evidence=f"Shape: {name}",
+        ))
+    elif _IMAGE_EXT_RE.match(alt_text):
+        # Alt text is just a filename like "IMG_4032.jpg"
+        findings.append(Finding(
+            strand="A",
+            severity="critical",
+            location=loc,
+            issue="Image alt text is a filename, not a meaningful description.",
+            evidence=f"Shape: {name}, alt text: \"{alt_text}\"",
+        ))
+    elif any(p.match(alt_text) for p in _WEAK_ALT_PATTERNS):
+        # Alt text is generic/auto-generated
+        findings.append(Finding(
+            strand="A",
+            severity="warning",
+            location=loc,
+            issue="Image alt text appears to be generic or auto-generated. Consider a description of what the image conveys.",
+            evidence=f"Shape: {name}, alt text: \"{alt_text}\"",
         ))
 
 
@@ -137,12 +174,14 @@ def _check_title(slide, loc, findings):
 
     if not has_title:
         for shape in slide.shapes:
-            if shape.has_text_frame and shape.placeholder_format is not None:
-                idx = shape.placeholder_format.idx
-                if idx == 0:
-                    if shape.text_frame.text.strip():
-                        has_title = True
-                        break
+            try:
+                pf = shape.placeholder_format
+            except ValueError:
+                continue
+            if shape.has_text_frame and pf is not None:
+                if pf.idx == 0 and shape.text_frame.text.strip():
+                    has_title = True
+                    break
 
     if not has_title:
         findings.append(Finding(
@@ -236,8 +275,12 @@ def _check_text(slide, loc, findings):
                             evidence=f'Link text: "{run.text.strip()}"',
                         ))
 
-        if shape.has_text_frame and shape.placeholder_format is not None:
-            idx = shape.placeholder_format.idx
+        try:
+            pf = shape.placeholder_format
+        except ValueError:
+            pf = None
+        if shape.has_text_frame and pf is not None:
+            idx = pf.idx
             if idx not in (0, 1):
                 continue
             bullet_count = sum(
