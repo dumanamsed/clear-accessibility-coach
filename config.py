@@ -7,7 +7,11 @@ load_dotenv(override=True)
 
 CTL_CONTACT_EMAIL = "CTL@montgomerycollege.edu"  # PLACEHOLDER — replace with real CTL email
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+# .strip() guards against trailing whitespace/newlines that commonly sneak in
+# when pasting the key into a host's env-var field. httpx rejects header values
+# with surrounding whitespace ("Illegal header value"), which otherwise surfaces
+# as a confusing APIConnectionError.
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
 CLAUDE_MODEL = "claude-sonnet-4-6"
 CLAUDE_MAX_TOKENS = 2000
 

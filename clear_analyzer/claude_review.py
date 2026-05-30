@@ -97,10 +97,11 @@ def run_claude_review(
         # Log the error type/message (never the key) so production issues are
         # diagnosable in the host's logs.
         import sys
-        cause = getattr(exc, "__cause__", None)
+        # Log only the exception type and message. We deliberately do NOT log the
+        # underlying cause or any request detail, because some errors (e.g. an
+        # illegal header value) embed the API key in their message.
         print(
-            f"[claude_review] AI pass unavailable: {type(exc).__name__}: {exc}"
-            f" | underlying: {repr(cause)}",
+            f"[claude_review] AI pass unavailable: {type(exc).__name__}: {exc}",
             file=sys.stderr,
             flush=True,
         )
