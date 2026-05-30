@@ -5,14 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CLEAR Accessibility Coach — Montgomery College CTL</title>
     <meta name="ctl-email" content="{{ ctl_email }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Besley:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 </head>
 <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
     <header class="site-header" role="banner">
-        <div class="container">
-            <h1 class="site-title">CLEAR Accessibility Coach</h1>
-            <p class="site-subtitle">Montgomery College Center for Teaching and Learning</p>
+        <div class="container site-header-inner">
+            <div class="brand-mark" aria-hidden="true">
+                <span class="brand-letter">C</span><span class="brand-letter">L</span><span class="brand-letter">E</span><span class="brand-letter">A</span><span class="brand-letter">R</span>
+            </div>
+            <div class="brand-text">
+                <h1 class="site-title">Accessibility Coach</h1>
+                <p class="site-subtitle">Montgomery College · Center for Teaching and Learning</p>
+            </div>
         </div>
     </header>
     <main id="main-content" class="container" role="main">

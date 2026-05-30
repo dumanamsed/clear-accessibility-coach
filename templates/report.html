@@ -6,33 +6,43 @@
     <style>
         @page { size: letter; margin: 1in 0.75in; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: "Avenir Next", "Avenir", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1A1A1A; line-height: 1.6; font-size: 11pt; }
-        .pdf-header { background: #51237F; color: #fff; padding: 24px 32px; margin: -1in -0.75in 24px; }
-        .pdf-header h1 { font-size: 18pt; font-weight: 600; margin-bottom: 4px; }
-        .pdf-header p { font-size: 10pt; opacity: 0.9; }
-        .pdf-header .citation { font-size: 9pt; margin-top: 8px; opacity: 0.8; }
-        h2 { font-size: 14pt; color: #51237F; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #FBA93E; }
-        h3 { font-size: 12pt; color: #51237F; margin: 12px 0 4px; }
-        .summary-box { background: #F7F8FA; border: 1px solid #ddd; border-radius: 6px; padding: 16px; margin-bottom: 20px; }
-        .summary-box p { font-size: 12pt; font-weight: 600; }
-        .strand-section { margin-bottom: 16px; page-break-inside: avoid; }
-        .strand-def { font-size: 10pt; color: #4A4A4A; margin-bottom: 8px; }
-        .finding { border-left: 3px solid #ddd; padding: 6px 12px; margin-bottom: 8px; background: #FAFAFA; }
+        body { font-family: "Avenir Next", "Avenir", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1A1A1A; line-height: 1.55; font-size: 11pt; }
+        .pdf-header { background: #51237F; color: #fff; padding: 26px 32px; margin: -1in -0.75in 24px; border-bottom: 4px solid #FBA93E; }
+        .pdf-header h1 { font-size: 19pt; font-weight: 600; margin-bottom: 4px; letter-spacing: -0.01em; }
+        .pdf-header p { font-size: 10pt; opacity: 0.92; }
+        .pdf-header .citation { font-size: 9pt; margin-top: 8px; opacity: 0.82; font-style: italic; }
+        .summary-box { background: #F6F5F9; border: 1px solid #E8E5EE; border-left: 4px solid #51237F; border-radius: 8px; padding: 16px 18px; margin-bottom: 22px; }
+        .summary-box p { font-size: 13pt; font-weight: 600; color: #51237F; }
+        .summary-note { font-size: 9.5pt; color: #5A5568; margin-top: 4px; font-weight: 400 !important; }
+        .strand-section { margin-bottom: 18px; page-break-inside: avoid; border: 1px solid #E8E5EE; border-radius: 10px; overflow: hidden; }
+        .strand-bar { padding: 12px 16px; color: #fff; }
+        .strand-bar h2 { font-size: 13pt; font-weight: 600; }
+        .strand-bar .count { font-size: 9pt; opacity: 0.9; }
+        .strand-body { padding: 14px 16px; }
+        .strand-def { font-size: 10pt; color: #5A5568; margin-bottom: 10px; font-style: italic; padding-left: 10px; border-left: 2px solid #E8E5EE; }
+        .finding { border: 1px solid #E8E5EE; border-left: 3px solid #ccc; padding: 10px 12px; margin-bottom: 8px; background: #FCFBFE; border-radius: 6px; page-break-inside: avoid; }
         .finding.critical { border-left-color: #F92329; }
         .finding.warning { border-left-color: #F15922; }
-        .finding.tip { border-left-color: #00AC9B; }
-        .finding-header { font-weight: 600; font-size: 10pt; }
-        .finding-location { color: #4A4A4A; font-size: 9pt; }
-        .finding-evidence { font-size: 9pt; color: #666; font-style: italic; margin-top: 2px; }
-        .finding-suggestion { font-size: 10pt; color: #51237F; margin-top: 4px; }
-        .severity-badge { display: inline-block; font-size: 8pt; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; padding: 1px 6px; border-radius: 3px; }
-        .severity-badge.critical { background: #fde8e8; color: #F92329; }
-        .severity-badge.warning { background: #fef3e0; color: #F15922; }
-        .severity-badge.tip { background: #e6f4ee; color: #00AC9B; }
-        .encouragement { background: #F7F8FA; padding: 16px; border-radius: 6px; margin-top: 24px; }
-        .encouragement p { font-size: 10pt; }
-        .pdf-footer { margin-top: 20px; padding-top: 12px; border-top: 1px solid #ddd; font-size: 9pt; color: #4A4A4A; }
-        .no-findings { color: #00AC9B; font-style: italic; padding: 8px 0; }
+        .finding.tip { border-left-color: #0A7065; }
+        .finding-header { margin-bottom: 4px; }
+        .finding-location { color: #5A5568; font-size: 9pt; margin-left: 6px; }
+        .ai-tag { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; color: #006A94; background: #E5F4FA; padding: 1px 6px; border-radius: 6px; margin-left: 6px; }
+        .finding-issue { font-size: 10.5pt; }
+        .finding-evidence { font-size: 8.5pt; color: #5A5568; font-family: "SF Mono", Menlo, Consolas, monospace; background: #F2EFF6; padding: 4px 8px; border-radius: 4px; margin-top: 4px; }
+        .finding-suggestion { font-size: 10pt; color: #1A1A1A; margin-top: 6px; padding: 8px 10px; background: #E5F4FA; border-radius: 6px; }
+        .finding-suggestion strong { color: #0095C8; }
+        .severity-badge { display: inline-block; font-size: 8pt; text-transform: uppercase; font-weight: 700; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 10px; }
+        .severity-badge.critical { background: #FDECEC; color: #C81C20; }
+        .severity-badge.warning { background: #FDEEE7; color: #C2410C; }
+        .severity-badge.tip { background: #E3F5F2; color: #0A7065; }
+        .strand-counts { margin-bottom: 10px; }
+        .learn-more { font-size: 8.5pt; margin-top: 8px; }
+        .learn-more a { color: #51237F; text-decoration: none; font-weight: 600; }
+        .no-findings { color: #0A7065; font-style: italic; padding: 6px 0; }
+        .encouragement { background: #F6F5F9; padding: 18px; border-radius: 10px; margin-top: 22px; border: 1px solid #E8E5EE; }
+        .encouragement p { font-size: 10pt; color: #5A5568; }
+        .encouragement a { color: #51237F; font-weight: 600; }
+        .pdf-footer { margin-top: 20px; padding-top: 12px; border-top: 1px solid #E8E5EE; font-size: 8.5pt; color: #5A5568; }
     </style>
 </head>
 <body>
@@ -49,7 +59,7 @@
 <div class="summary-box">
     <p>{{ report.total_findings }} item{{ 's' if report.total_findings != 1 else '' }} to review across {{ report.strands_with_findings }} of 5 CLEAR strands.</p>
     {% if not report.claude_available %}
-    <p style="font-size: 10pt; color: #4A4A4A; margin-top: 4px;">Note: AI-powered suggestions were not available for this analysis. Results are based on automated rule checks only.</p>
+    <p class="summary-note">Note: AI-powered suggestions were not available for this analysis. Results are based on automated rule checks only.</p>
     {% endif %}
 </div>
 
@@ -57,44 +67,49 @@
 {% set strand = report.strands[strand_key] %}
 {% set info = strand_definitions[strand_key] %}
 <section class="strand-section">
-    <h2>{{ strand_key }} — {{ info.name }}</h2>
-    <p class="strand-def">{{ info.definition }}</p>
+    <div class="strand-bar" style="background: {{ info.color }};{% if strand_key == 'E' %} color: #2d1247;{% endif %}">
+        <h2>{{ strand_key }} — {{ info.name }}</h2>
+        <span class="count">{{ strand.total }} item{{ 's' if strand.total != 1 else '' }} to review</span>
+    </div>
+    <div class="strand-body">
+        <p class="strand-def">{{ info.definition }}</p>
 
-    {% if strand.total == 0 %}
-    <p class="no-findings">No issues detected for this strand.</p>
-    {% else %}
-    <p style="font-size: 10pt; color: #4A4A4A; margin-bottom: 8px;">
-        {{ strand.total }} finding{{ 's' if strand.total != 1 else '' }}:
-        {% if strand.critical %}<span class="severity-badge critical">{{ strand.critical }} critical</span>{% endif %}
-        {% if strand.warning %}<span class="severity-badge warning">{{ strand.warning }} warning{{ 's' if strand.warning != 1 else '' }}</span>{% endif %}
-        {% if strand.tip %}<span class="severity-badge tip">{{ strand.tip }} tip{{ 's' if strand.tip != 1 else '' }}</span>{% endif %}
-    </p>
+        {% if strand.total == 0 %}
+        <p class="no-findings">No issues detected for this strand. Nice work!</p>
+        {% else %}
+        <p class="strand-counts">
+            {% if strand.critical %}<span class="severity-badge critical">{{ strand.critical }} critical</span>{% endif %}
+            {% if strand.warning %}<span class="severity-badge warning">{{ strand.warning }} warning{{ 's' if strand.warning != 1 else '' }}</span>{% endif %}
+            {% if strand.tip %}<span class="severity-badge tip">{{ strand.tip }} tip{{ 's' if strand.tip != 1 else '' }}</span>{% endif %}
+        </p>
 
-    {% for finding in strand.findings %}
-    <article class="finding {{ finding.severity }}">
-        <div class="finding-header">
-            <span class="severity-badge {{ finding.severity }}">{{ finding.severity }}</span>
-            <span class="finding-location">{{ finding.location }}</span>
-        </div>
-        <p>{{ finding.issue }}</p>
-        {% if finding.evidence %}
-        <p class="finding-evidence">{{ finding.evidence }}</p>
+        {% for finding in strand.findings %}
+        <article class="finding {{ finding.severity }}">
+            <div class="finding-header">
+                <span class="severity-badge {{ finding.severity }}">{{ finding.severity }}</span>
+                <span class="finding-location">{{ finding.location }}</span>
+                {% if finding.source == 'claude' %}<span class="ai-tag">AI coaching</span>{% endif %}
+            </div>
+            <p class="finding-issue">{{ finding.issue }}</p>
+            {% if finding.evidence %}
+            <p class="finding-evidence">{{ finding.evidence }}</p>
+            {% endif %}
+            {% if finding.suggestion %}
+            <p class="finding-suggestion"><strong>Suggestion:</strong> {{ finding.suggestion }}</p>
+            {% endif %}
+        </article>
+        {% endfor %}
         {% endif %}
-        {% if finding.suggestion %}
-        <p class="finding-suggestion">{{ finding.suggestion }}</p>
-        {% endif %}
-    </article>
-    {% endfor %}
-    {% endif %}
 
-    <p style="font-size: 9pt; margin-top: 6px;"><a href="{{ pressbook_links[strand_key] }}">Learn more: {{ info.name }} in the CLEAR Pressbook</a></p>
+        <p class="learn-more"><a href="{{ pressbook_links[strand_key] }}">Learn more about {{ info.name }} in the CLEAR Pressbook</a></p>
+    </div>
 </section>
 {% endfor %}
 
 <div class="encouragement">
     <p>Making your materials accessible is a journey, not a destination. Every improvement you make helps your students engage more fully with your content. The items above are starting points — tackle the critical ones first, then work through warnings and tips at your own pace.</p>
     <p style="margin-top: 8px;">For detailed guidance, explore the <a href="https://pressbooks.montgomerycollege.edu/clear/">CLEAR Pressbook</a> or reach out to the <a href="mailto:{{ ctl_email }}">Center for Teaching and Learning</a> for one-on-one support.</p>
-    <p style="margin-top: 8px; font-size: 9pt; color: #4A4A4A;">Source: CLEAR Framework, Dr. Paul D. Miller, Montgomery College CTL.</p>
+    <p style="margin-top: 8px; font-size: 9pt; font-style: italic;">Source: CLEAR Framework, Dr. Paul D. Miller, Montgomery College CTL.</p>
 </div>
 
 {% if is_pdf %}

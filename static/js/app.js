@@ -2,11 +2,11 @@
     "use strict";
 
     var STRAND_DEFINITIONS = {
-        C: { name: "Caption Everything", definition: "Video, audio, and embedded media must have accurate captions and transcripts.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/c-caption-everything/" },
-        L: { name: "Logical Layout", definition: "Use proper heading hierarchy, slide titles, semantic structure, and predictable navigation.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/l-logical-layout/" },
-        E: { name: "Easy to Read", definition: "Use readable fonts and sizes, sufficient color contrast, plain language, short paragraphs, and chunked content.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/e-easy-to-read/" },
-        A: { name: "Alt Text for Images", definition: "Provide meaningful image descriptions; mark decorative images as such.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/a-alt-text-for-images/" },
-        R: { name: "Responsive Design", definition: "Content works across screen sizes, devices, and assistive technology.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/r-responsive-design/" }
+        C: { name: "Caption Everything", definition: "Video, audio, and embedded media must have accurate captions and transcripts.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/c-caption-everything/", color: "#0095C8" },
+        L: { name: "Logical Layout", definition: "Use proper heading hierarchy, slide titles, semantic structure, and predictable navigation.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/l-logical-layout/", color: "#51237F" },
+        E: { name: "Easy to Read", definition: "Use readable fonts and sizes, sufficient color contrast, plain language, short paragraphs, and chunked content.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/e-easy-to-read/", color: "#FBA93E" },
+        A: { name: "Alt Text for Images", definition: "Provide meaningful image descriptions; mark decorative images as such.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/a-alt-text-for-images/", color: "#00AC9B" },
+        R: { name: "Responsive Design", definition: "Content works across screen sizes, devices, and assistive technology.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/r-responsive-design/", color: "#B82A91" }
     };
     var STRAND_ORDER = ["C", "L", "E", "A", "R"];
     var FRAMEWORK_CITATION = "Grounded in the CLEAR Framework by Dr. Paul D. Miller, Ed.D., Montgomery College Center for Teaching and Learning.";
@@ -197,6 +197,21 @@
         }
         html.push('</div>');
 
+        // Strand dashboard (at-a-glance chips)
+        html.push('<div class="strand-dashboard" role="group" aria-label="CLEAR strand summary">');
+        STRAND_ORDER.forEach(function (key) {
+            var strand = data.strands[key];
+            var info = STRAND_DEFINITIONS[key];
+            var isClear = strand.total === 0;
+            var chipGold = (key === "E") ? " on-gold" : "";
+            html.push('<button class="strand-chip' + (isClear ? ' clear' : '') + '" style="--chip-color:' + info.color + '" data-jump="' + key + '" aria-label="' + info.name + ': ' + strand.total + ' findings">');
+            html.push('<span class="strand-chip-letter' + chipGold + '">' + key + '</span>');
+            html.push('<div class="strand-chip-count">' + (isClear ? '✓' : strand.total) + '</div>');
+            html.push('<div class="strand-chip-label">' + key + '</div>');
+            html.push('</button>');
+        });
+        html.push('</div>');
+
         // Media follow-up panel
         if (data.has_media) {
             html.push(renderMediaPanel(data.media_count));
@@ -207,21 +222,22 @@
             var strand = data.strands[key];
             var info = STRAND_DEFINITIONS[key];
             var isOpen = strand.total > 0;
+            var goldClass = (key === "E") ? " on-gold" : "";
 
-            html.push('<section class="strand-card' + (isOpen ? ' open' : '') + '" aria-labelledby="strand-heading-' + key + '">');
-            html.push('<button class="strand-header" id="strand-heading-' + key + '" aria-expanded="' + isOpen + '" onclick="this.parentElement.classList.toggle(\'open\'); this.setAttribute(\'aria-expanded\', this.parentElement.classList.contains(\'open\'))">');
+            html.push('<section class="strand-card' + (isOpen ? ' open' : '') + '" id="strand-' + key + '" style="--strand-color:' + info.color + '" aria-labelledby="strand-heading-' + key + '">');
+            html.push('<button class="strand-header" id="strand-heading-' + key + '" aria-expanded="' + isOpen + '" aria-controls="strand-body-' + key + '" onclick="this.parentElement.classList.toggle(\'open\'); this.setAttribute(\'aria-expanded\', this.parentElement.classList.contains(\'open\'))">');
             html.push('<span class="strand-header-left">');
-            html.push('<span class="strand-letter">' + key + '</span>');
-            html.push('<span><span class="strand-name">' + info.name + '</span> <span class="strand-count">(' + strand.total + ')</span></span>');
+            html.push('<span class="strand-letter' + goldClass + '">' + key + '</span>');
+            html.push('<span><span class="strand-name">' + info.name + '</span><br><span class="strand-count">' + (strand.total === 0 ? 'No issues found' : strand.total + ' item' + (strand.total !== 1 ? 's' : '') + ' to review') + '</span></span>');
             html.push('</span>');
             html.push('<svg class="strand-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>');
             html.push('</button>');
 
-            html.push('<div class="strand-body">');
+            html.push('<div class="strand-body" id="strand-body-' + key + '">');
             html.push('<p class="strand-definition">' + info.definition + '</p>');
 
             if (strand.total === 0) {
-                html.push('<p class="no-findings-text">No issues detected for this strand.</p>');
+                html.push('<p class="no-findings-text">No issues detected for this strand. Nice work!</p>');
             } else {
                 html.push('<div class="strand-badges">');
                 if (strand.critical) html.push('<span class="badge badge-critical">' + strand.critical + ' critical</span>');
@@ -234,6 +250,7 @@
                     html.push('<div class="finding-meta">');
                     html.push('<span class="badge badge-' + f.severity + '">' + f.severity + '</span>');
                     html.push('<span class="finding-location">' + escapeHtml(f.location) + '</span>');
+                    if (f.source === "claude") html.push('<span class="finding-source-tag">AI coaching</span>');
                     html.push('</div>');
                     html.push('<p class="finding-issue">' + escapeHtml(f.issue) + '</p>');
                     if (f.evidence) html.push('<p class="finding-evidence">' + escapeHtml(f.evidence) + '</p>');
@@ -242,7 +259,7 @@
                 });
             }
 
-            html.push('<p class="strand-learn-more"><a href="' + info.link + '" target="_blank" rel="noopener">Learn more: ' + info.name + ' in the CLEAR Pressbook</a></p>');
+            html.push('<p class="strand-learn-more"><a href="' + info.link + '" target="_blank" rel="noopener">Learn more about ' + info.name + ' in the CLEAR Pressbook</a></p>');
             html.push('</div>');
             html.push('</section>');
         });
@@ -270,6 +287,22 @@
             if (fileInput) { fileInput.value = ""; fileSelected.textContent = ""; btnAnalyzeFile.disabled = true; }
             if (pasteArea) { pasteArea.value = ""; btnAnalyzePaste.disabled = true; }
             showScreen("upload");
+        });
+
+        // Bind dashboard chip jump-to-strand
+        container.querySelectorAll(".strand-chip").forEach(function (chip) {
+            chip.addEventListener("click", function () {
+                var key = chip.dataset.jump;
+                var card = document.getElementById("strand-" + key);
+                if (card) {
+                    if (!card.classList.contains("open")) {
+                        var hdr = card.querySelector(".strand-header");
+                        card.classList.add("open");
+                        if (hdr) hdr.setAttribute("aria-expanded", "true");
+                    }
+                    card.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+            });
         });
 
         // Bind media buttons

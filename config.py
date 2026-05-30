@@ -1,7 +1,9 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# override=True ensures the .env file takes precedence over any empty or stale
+# ANTHROPIC_API_KEY already present in the shell environment.
+load_dotenv(override=True)
 
 CTL_CONTACT_EMAIL = "CTL@montgomerycollege.edu"  # PLACEHOLDER — replace with real CTL email
 
