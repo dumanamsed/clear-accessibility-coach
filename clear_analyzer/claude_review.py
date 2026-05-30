@@ -51,7 +51,14 @@ def run_claude_review(
     summary = _build_summary(file_type, outline, alt_texts, rule_findings, body_sample)
 
     try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        # Explicit timeout + retries make the call resilient to slow cold-start
+        # networking on free-tier hosts (where the first outbound connection to
+        # api.anthropic.com can exceed the default 5s connect timeout).
+        client = anthropic.Anthropic(
+            api_key=ANTHROPIC_API_KEY,
+            timeout=60.0,
+            max_retries=4,
+        )
         response = client.messages.create(
             model=CLAUDE_MODEL,
             max_tokens=CLAUDE_MAX_TOKENS,
@@ -90,8 +97,10 @@ def run_claude_review(
         # Log the error type/message (never the key) so production issues are
         # diagnosable in the host's logs.
         import sys
+        cause = getattr(exc, "__cause__", None)
         print(
-            f"[claude_review] AI pass unavailable: {type(exc).__name__}: {exc}",
+            f"[claude_review] AI pass unavailable: {type(exc).__name__}: {exc}"
+            f" | underlying: {repr(cause)}",
             file=sys.stderr,
             flush=True,
         )
