@@ -85,7 +85,16 @@ def run_claude_review(
             ))
         return findings
 
-    except Exception:
+    except Exception as exc:
+        # Graceful degradation: the report still renders with rule-based findings.
+        # Log the error type/message (never the key) so production issues are
+        # diagnosable in the host's logs.
+        import sys
+        print(
+            f"[claude_review] AI pass unavailable: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
         return []
 
 
