@@ -127,9 +127,14 @@
         });
     }
 
+    // AI pass state: 'disabled' (no API key), 'pending', 'done', 'unavailable'
+    var aiState = "disabled";
+    var mediaSelection = null;
+
     function submitAnalysis(formData) {
         showScreen("analyzing");
         startAnalyzingMessages();
+        mediaSelection = null;
 
         fetch("/analyze", { method: "POST", body: formData })
             .then(function (res) {
@@ -138,13 +143,77 @@
             })
             .then(function (data) {
                 reportData = data;
+                aiState = data.claude_enabled ? "pending" : "disabled";
                 renderReport(data);
                 showScreen("report");
+                if (aiState === "pending") startAiReview(data);
             })
             .catch(function (err) {
                 showScreen("upload");
                 showError(err.message);
             });
+    }
+
+    function startAiReview(data) {
+        var ruleFindings = [];
+        STRAND_ORDER.forEach(function (key) {
+            data.strands[key].findings.forEach(function (f) { ruleFindings.push(f); });
+        });
+
+        fetch("/ai-review", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ai_context: data.ai_context, rule_findings: ruleFindings })
+        })
+            .then(function (res) {
+                if (!res.ok) throw new Error("AI review failed");
+                return res.json();
+            })
+            .then(function (result) {
+                if (result.claude_available && result.findings.length) {
+                    mergeAiFindings(result.findings);
+                    aiState = "done";
+                } else {
+                    aiState = result.claude_available ? "done" : "unavailable";
+                }
+                renderReport(reportData);
+                restoreMediaSelection();
+            })
+            .catch(function () {
+                aiState = "unavailable";
+                renderReport(reportData);
+                restoreMediaSelection();
+            });
+    }
+
+    function mergeAiFindings(findings) {
+        findings.forEach(function (f) {
+            var strand = reportData.strands[f.strand];
+            if (!strand) return;
+            strand.findings.push(f);
+            strand.total += 1;
+            if (f.severity === "critical") strand.critical += 1;
+            else if (f.severity === "warning") strand.warning += 1;
+            else strand.tip += 1;
+        });
+        var total = 0, withFindings = 0;
+        STRAND_ORDER.forEach(function (key) {
+            total += reportData.strands[key].total;
+            if (reportData.strands[key].total > 0) withFindings += 1;
+        });
+        reportData.total_findings = total;
+        reportData.strands_with_findings = withFindings;
+        var cCount = reportData.strands.C.total;
+        if (cCount > 0) {
+            reportData.has_media = true;
+            reportData.media_count = Math.max(reportData.media_count, cCount);
+        }
+    }
+
+    function restoreMediaSelection() {
+        if (!mediaSelection) return;
+        var btn = document.querySelector('.media-btn[data-value="' + mediaSelection + '"]');
+        if (btn) btn.click();
     }
 
     function showScreen(screen) {
@@ -192,7 +261,9 @@
         html.push('<p class="report-filename">' + escapeHtml(data.filename) + '</p>');
         html.push('<p class="report-summary">' + data.total_findings + ' item' + (data.total_findings !== 1 ? 's' : '') + ' to review across ' + data.strands_with_findings + ' of 5 CLEAR strands.</p>');
         html.push('<p class="report-citation">' + FRAMEWORK_CITATION + '</p>');
-        if (!data.claude_available) {
+        if (aiState === "pending") {
+            html.push('<p class="report-claude-notice ai-pending" role="status"><span class="ai-pulse" aria-hidden="true"></span>AI coaching suggestions are being generated — they will appear below shortly.</p>');
+        } else if (aiState === "unavailable" || aiState === "disabled") {
             html.push('<p class="report-claude-notice">AI-powered suggestions were not available for this analysis. Results are based on automated rule checks only.</p>');
         }
         html.push('</div>');
@@ -283,6 +354,8 @@
         document.getElementById("btn-download-pdf").addEventListener("click", downloadPdf);
         document.getElementById("btn-start-over").addEventListener("click", function () {
             reportData = null;
+            aiState = "disabled";
+            mediaSelection = null;
             container.innerHTML = "";
             if (fileInput) { fileInput.value = ""; fileSelected.textContent = ""; btnAnalyzeFile.disabled = true; }
             if (pasteArea) { pasteArea.value = ""; btnAnalyzePaste.disabled = true; }
@@ -311,6 +384,7 @@
             btn.addEventListener("click", function () {
                 mediaButtons.forEach(function (b) { b.classList.remove("selected"); });
                 btn.classList.add("selected");
+                mediaSelection = btn.dataset.value;
                 handleMediaResponse(btn.dataset.value, data);
             });
         });
@@ -357,13 +431,27 @@
         })
         .then(function (res) {
             if (!res.ok) throw new Error("PDF generation failed");
-            return res.text();
-        })
-        .then(function (html) {
-            var w = window.open("", "_blank");
-            w.document.write(html);
-            w.document.close();
-            w.onload = function () { w.print(); };
+            var type = res.headers.get("Content-Type") || "";
+            if (type.indexOf("application/pdf") !== -1) {
+                // Server rendered a real PDF — download it directly.
+                return res.blob().then(function (blob) {
+                    var url = URL.createObjectURL(blob);
+                    var a = document.createElement("a");
+                    a.href = url;
+                    a.download = "clear-accessibility-report.pdf";
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    URL.revokeObjectURL(url);
+                });
+            }
+            // Fallback: print-styled HTML — open it and trigger the print dialog.
+            return res.text().then(function (html) {
+                var w = window.open("", "_blank");
+                w.document.write(html);
+                w.document.close();
+                w.onload = function () { w.print(); };
+            });
         })
         .catch(function (err) {
             alert("Could not generate PDF: " + err.message);

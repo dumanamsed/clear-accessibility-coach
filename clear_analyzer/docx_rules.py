@@ -28,8 +28,50 @@ def analyze_docx(file_bytes: bytes) -> list[Finding]:
     _check_hyperlinks(doc, findings)
     _check_paragraphs(doc, findings)
     _check_tables(doc, findings)
+    _check_small_fonts(doc, findings)
+    _check_all_caps(doc, findings)
 
     return findings
+
+
+def _check_small_fonts(doc, findings, max_flags=5):
+    """Flag runs with an explicitly tiny font size (< 10pt)."""
+    flagged = 0
+    for i, para in enumerate(doc.paragraphs, 1):
+        if flagged >= max_flags:
+            break
+        for run in para.runs:
+            size = run.font.size
+            if size is not None and size.pt < 10 and run.text.strip():
+                findings.append(Finding(
+                    strand="E",
+                    severity="tip",
+                    location=f"Paragraph {i}",
+                    issue=f"Text uses a very small font size ({size.pt:.0f}pt). Consider 11pt or larger for body text.",
+                    evidence=run.text.strip()[:80],
+                ))
+                flagged += 1
+                break
+
+
+def _check_all_caps(doc, findings, max_flags=3):
+    """Flag long stretches of ALL-CAPS text, which are harder to read and may
+    be spelled out letter-by-letter by some screen readers."""
+    flagged = 0
+    for i, para in enumerate(doc.paragraphs, 1):
+        if flagged >= max_flags:
+            break
+        text = para.text.strip()
+        letters = [c for c in text if c.isalpha()]
+        if len(letters) > 30 and all(c.isupper() for c in letters):
+            findings.append(Finding(
+                strand="E",
+                severity="tip",
+                location=f"Paragraph {i}",
+                issue="Long stretch of ALL-CAPS text. Mixed case is easier to read; use bold or a heading style for emphasis instead.",
+                evidence=text[:80],
+            ))
+            flagged += 1
 
 
 def _find_images_in_element(element):

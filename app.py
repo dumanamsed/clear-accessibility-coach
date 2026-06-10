@@ -30,6 +30,13 @@ def index():
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
+    """Phase 1: deterministic rule checks. Returns instantly.
+
+    The response includes an `ai_context` blob (document outline, alt text,
+    body sample) that the client POSTs back to /ai-review for phase 2. Round-
+    tripping through the client keeps the server stateless — no upload content
+    is ever stored server-side, consistent with the privacy promise.
+    """
     paste_content = request.form.get("paste_content", "").strip()
     paste_type = request.form.get("paste_type", "text")
     file = request.files.get("file")
@@ -55,23 +62,57 @@ def analyze():
     else:
         return jsonify({"error": "No file or content provided."}), 400
 
-    claude_findings = run_claude_review(
-        file_type=file_type,
-        outline=outline,
-        alt_texts=alt_texts,
-        rule_findings=findings,
-        body_sample=body_sample,
-    )
+    has_media = any(f.strand == "C" for f in findings)
+    media_count = sum(1 for f in findings if f.strand == "C")
 
-    all_findings = findings + claude_findings
-    has_media = any(f.strand == "C" for f in all_findings)
-    media_count = sum(1 for f in all_findings if f.strand == "C")
-
-    report_data = _build_report_data(all_findings, has_media, media_count)
-    report_data["claude_available"] = bool(claude_findings)
+    report_data = _build_report_data(findings, has_media, media_count)
+    report_data["claude_enabled"] = bool(config.ANTHROPIC_API_KEY)
     report_data["filename"] = filename if file and file.filename else "Pasted content"
+    report_data["ai_context"] = {
+        "file_type": file_type,
+        "outline": outline,
+        "alt_texts": alt_texts,
+        "body_sample": body_sample,
+    }
 
     return jsonify(report_data)
+
+
+@app.route("/ai-review", methods=["POST"])
+def ai_review():
+    """Phase 2: Claude qualitative coaching pass.
+
+    Called by the client after the rule report renders, with the ai_context
+    from /analyze plus the rule findings (so Claude doesn't repeat them).
+    """
+    payload = request.get_json(silent=True) or {}
+    ctx = payload.get("ai_context") or {}
+    rule_dicts = payload.get("rule_findings") or []
+
+    rule_findings = [
+        Finding(
+            strand=d.get("strand", ""),
+            severity=d.get("severity", "tip"),
+            location=d.get("location", ""),
+            issue=d.get("issue", ""),
+            evidence=d.get("evidence", ""),
+        )
+        for d in rule_dicts
+        if isinstance(d, dict)
+    ]
+
+    claude_findings = run_claude_review(
+        file_type=ctx.get("file_type", "document"),
+        outline=ctx.get("outline") or [],
+        alt_texts=ctx.get("alt_texts") or [],
+        rule_findings=rule_findings,
+        body_sample=ctx.get("body_sample", ""),
+    )
+
+    return jsonify({
+        "claude_available": bool(claude_findings),
+        "findings": [f.to_dict() for f in claude_findings],
+    })
 
 
 @app.route("/export-pdf", methods=["POST"])
@@ -91,7 +132,30 @@ def export_pdf():
         is_pdf=True,
     )
 
-    return html_content
+    # Prefer a true server-side PDF (WeasyPrint works on Linux hosts like
+    # Render). On machines without its native libraries (e.g. macOS without
+    # Homebrew), fall back to returning the print-styled HTML — the client
+    # detects the content type and opens the browser print dialog instead.
+    try:
+        from weasyprint import HTML as WeasyHTML
+
+        pdf_bytes = WeasyHTML(string=html_content).write_pdf()
+        return Response(
+            pdf_bytes,
+            mimetype="application/pdf",
+            headers={
+                "Content-Disposition": "attachment; filename=clear-accessibility-report.pdf"
+            },
+        )
+    except Exception as exc:
+        import sys
+        print(
+            f"[export_pdf] WeasyPrint unavailable, falling back to print view: "
+            f"{type(exc).__name__}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return html_content
 
 
 def _analyze_file(file_bytes, ext):

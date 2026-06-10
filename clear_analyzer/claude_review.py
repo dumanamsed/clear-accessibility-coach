@@ -4,6 +4,16 @@ from config import ANTHROPIC_API_KEY, CLAUDE_MODEL, CLAUDE_MAX_TOKENS
 from .models import Finding
 from .citations import STRAND_DEFINITIONS
 
+# Module-level client so the HTTPS connection pool is reused across requests
+# (saves a ~300ms TLS handshake per analysis). Thread-safe per the SDK docs.
+# Explicit timeout + retries make the call resilient to slow cold-start
+# networking on free-tier hosts.
+_client = (
+    anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=60.0, max_retries=4)
+    if ANTHROPIC_API_KEY
+    else None
+)
+
 SYSTEM_PROMPT = """You are an accessibility coach grounded in the CLEAR Framework by Dr. Paul D. Miller, Ed.D., Montgomery College Center for Teaching and Learning.
 
 The CLEAR Framework defines five strands of digital accessibility:
@@ -51,15 +61,7 @@ def run_claude_review(
     summary = _build_summary(file_type, outline, alt_texts, rule_findings, body_sample)
 
     try:
-        # Explicit timeout + retries make the call resilient to slow cold-start
-        # networking on free-tier hosts (where the first outbound connection to
-        # api.anthropic.com can exceed the default 5s connect timeout).
-        client = anthropic.Anthropic(
-            api_key=ANTHROPIC_API_KEY,
-            timeout=60.0,
-            max_retries=4,
-        )
-        response = client.messages.create(
+        response = _client.messages.create(
             model=CLAUDE_MODEL,
             max_tokens=CLAUDE_MAX_TOKENS,
             system=SYSTEM_PROMPT,

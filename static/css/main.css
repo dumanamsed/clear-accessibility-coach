@@ -467,6 +467,25 @@ textarea:focus {
     border-radius: var(--radius-sm);
     position: relative; z-index: 1;
 }
+.report-claude-notice.ai-pending {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    background: rgba(0, 149, 200, 0.22);
+    opacity: 1;
+}
+.ai-pulse {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--reflection-blue);
+    flex-shrink: 0;
+    animation: ai-pulse 1.4s ease-in-out infinite;
+}
+@keyframes ai-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.6); opacity: 0.55; }
+}
 
 /* ---------- Strand dashboard chips ---------- */
 .strand-dashboard {

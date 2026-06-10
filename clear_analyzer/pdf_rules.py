@@ -11,9 +11,32 @@ def analyze_pdf(file_bytes: bytes) -> list[Finding]:
     _check_scanned(doc, findings)
     _check_title(doc, findings)
     _check_images(doc, findings)
+    _check_lang(doc, findings)
 
     doc.close()
     return findings
+
+
+def _check_lang(doc, findings):
+    """Check whether the PDF declares a document language (/Lang in the catalog).
+    Screen readers use it to pick the correct pronunciation voice."""
+    has_lang = False
+    try:
+        catalog = doc.pdf_catalog()
+        lang = doc.xref_get_key(catalog, "Lang")
+        if lang and lang[0] != "null" and lang[1].strip("()<> ") != "":
+            has_lang = True
+    except Exception:
+        return  # malformed catalog — don't guess
+
+    if not has_lang:
+        findings.append(Finding(
+            strand="R",
+            severity="tip",
+            location="Document metadata",
+            issue="PDF does not declare a document language. Screen readers need it to choose the correct pronunciation voice.",
+            evidence="Set the language in your authoring tool (e.g. Word: File > Info, or Acrobat: File > Properties > Advanced > Language) before exporting.",
+        ))
 
 
 def _check_tagged(doc, findings):

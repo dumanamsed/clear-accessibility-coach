@@ -27,8 +27,55 @@ def analyze_html(content: str) -> list[Finding]:
     _check_media(soup, findings)
     _check_contrast(soup, findings)
     _check_viewport(soup, findings)
+    _check_lang(soup, findings)
+    _check_tables(soup, findings)
+    _check_empty_links(soup, findings)
 
     return findings
+
+
+def _check_lang(soup, findings):
+    html = soup.find("html")
+    if html is not None and not (html.get("lang") or "").strip():
+        findings.append(Finding(
+            strand="R",
+            severity="warning",
+            location="<html> element",
+            issue="The page does not declare a language. Screen readers need it to choose the correct pronunciation voice.",
+            evidence='Add lang="en" (or the content\'s language) to the <html> tag.',
+        ))
+
+
+def _check_tables(soup, findings):
+    for i, table in enumerate(soup.find_all("table"), 1):
+        if table.find("th") is None:
+            findings.append(Finding(
+                strand="L",
+                severity="warning",
+                location=f"Table {i}",
+                issue="Table has no header cells (<th>). Screen reader users cannot tell which column or row a value belongs to.",
+                evidence="Mark the header row cells with <th scope=\"col\"> (or <th scope=\"row\">).",
+            ))
+
+
+def _check_empty_links(soup, findings):
+    for a in soup.find_all("a", href=True):
+        if a.get_text(strip=True):
+            continue
+        # A link whose only content is an image with alt text still has an
+        # accessible name — only flag truly nameless links.
+        imgs = a.find_all("img")
+        if any((img.get("alt") or "").strip() for img in imgs):
+            continue
+        if (a.get("aria-label") or "").strip() or (a.get("title") or "").strip():
+            continue
+        findings.append(Finding(
+            strand="E",
+            severity="warning",
+            location=f"Link to {a['href'][:60]}",
+            issue="Link has no text or accessible name, so screen readers announce only the raw URL.",
+            evidence=str(a)[:120],
+        ))
 
 
 def analyze_text(content: str) -> list[Finding]:

@@ -36,8 +36,36 @@ def analyze_pptx(file_bytes: bytes) -> list[Finding]:
         _check_title(slide, loc, findings)
         _check_media(slide, loc, findings)
         _check_text(slide, loc, findings)
+        _check_reading_order(slide, loc, findings)
 
     return findings
+
+
+def _check_reading_order(slide, loc, findings):
+    """Heuristic: floating text boxes (added outside the layout's placeholders)
+    are read by screen readers in insertion order, which often differs from the
+    visual order. Two or more on a slide is a common reading-order problem."""
+    floating = 0
+    for shape in slide.shapes:
+        if not getattr(shape, "has_text_frame", False):
+            continue
+        if not shape.text_frame.text.strip():
+            continue
+        try:
+            is_placeholder = shape.placeholder_format is not None
+        except ValueError:
+            is_placeholder = False
+        if not is_placeholder:
+            floating += 1
+
+    if floating >= 2:
+        findings.append(Finding(
+            strand="L",
+            severity="warning",
+            location=loc,
+            issue=f"Slide has {floating} floating text boxes. Screen readers read them in the order they were added, which may not match the visual layout.",
+            evidence="Use the layout's placeholders where possible, and check Home > Arrange > Selection Pane for reading order.",
+        ))
 
 
 def _get_alt_text(shape):
