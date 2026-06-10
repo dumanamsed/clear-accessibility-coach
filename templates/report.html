@@ -3,6 +3,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <title>CLEAR Accessibility Report — {{ report.filename }}</title>
     <style>
         @page { size: letter; margin: 1in 0.75in; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -30,7 +31,7 @@
         .finding-issue { font-size: 10.5pt; }
         .finding-evidence { font-size: 8.5pt; color: #5A5568; font-family: "SF Mono", Menlo, Consolas, monospace; background: #F2EFF6; padding: 4px 8px; border-radius: 4px; margin-top: 4px; }
         .finding-suggestion { font-size: 10pt; color: #1A1A1A; margin-top: 6px; padding: 8px 10px; background: #E5F4FA; border-radius: 6px; }
-        .finding-suggestion strong { color: #0095C8; }
+        .finding-suggestion strong { color: #006A94; }
         .severity-badge { display: inline-block; font-size: 8pt; text-transform: uppercase; font-weight: 700; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 10px; }
         .severity-badge.critical { background: #FDECEC; color: #C81C20; }
         .severity-badge.warning { background: #FDEEE7; color: #C2410C; }
@@ -67,7 +68,9 @@
 {% set strand = report.strands[strand_key] %}
 {% set info = strand_definitions[strand_key] %}
 <section class="strand-section">
-    <div class="strand-bar" style="background: {{ info.color }};{% if strand_key == 'E' %} color: #2d1247;{% endif %}">
+    {# E keeps the brand-gold bar with dark text (8.4:1); other strands use
+       their AA "ink" variant so white bar text clears 4.5:1. #}
+    <div class="strand-bar" style="background: {{ info.color if strand_key == 'E' else info.ink }};{% if strand_key == 'E' %} color: #2d1247;{% endif %}">
         <h2>{{ strand_key }} — {{ info.name }}</h2>
         <span class="count">{{ strand.total }} item{{ 's' if strand.total != 1 else '' }} to review</span>
     </div>

@@ -22,7 +22,9 @@
                 <p class="drop-text">Drag and drop your file here</p>
                 <p class="drop-subtext">or click to choose a file</p>
                 <label for="file-input" class="visually-hidden">Choose a file to analyze</label>
-                <input type="file" id="file-input" name="file" accept=".pptx,.docx,.pdf,.html,.htm,.txt" class="visually-hidden">
+                <!-- tabindex="-1": the visible drop zone is the keyboard target;
+                     without it, Tab lands on this invisible input (focus-visible fail). -->
+                <input type="file" id="file-input" name="file" accept=".pptx,.docx,.pdf,.html,.htm,.txt" class="visually-hidden" tabindex="-1">
             </div>
             <p id="file-selected" class="file-selected" aria-live="polite"></p>
             <p class="supported-types">Supported: .pptx, .docx, .pdf, .html, .txt — max 25 MB</p>
@@ -51,4 +53,8 @@
 </div>
 
 <div id="report-screen" hidden></div>
+
+<!-- Persistent live region: sits OUTSIDE #report-screen so it survives report
+     re-renders. Announces the arrival of AI suggestions to screen readers. -->
+<div id="sr-announcer" class="visually-hidden" aria-live="polite" role="status"></div>
 {% endblock %}

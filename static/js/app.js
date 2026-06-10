@@ -1,12 +1,14 @@
 (function () {
     "use strict";
 
+    // "color" = full-brightness MC brand accent, decorative non-text use only.
+    // "ink" = darkened same-hue variant clearing WCAG AA 4.5:1 for text use.
     var STRAND_DEFINITIONS = {
-        C: { name: "Caption Everything", definition: "Video, audio, and embedded media must have accurate captions and transcripts.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/c-caption-everything/", color: "#0095C8" },
-        L: { name: "Logical Layout", definition: "Use proper heading hierarchy, slide titles, semantic structure, and predictable navigation.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/l-logical-layout/", color: "#51237F" },
-        E: { name: "Easy to Read", definition: "Use readable fonts and sizes, sufficient color contrast, plain language, short paragraphs, and chunked content.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/e-easy-to-read/", color: "#FBA93E" },
-        A: { name: "Alt Text for Images", definition: "Provide meaningful image descriptions; mark decorative images as such.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/a-alt-text-for-images/", color: "#00AC9B" },
-        R: { name: "Responsive Design", definition: "Content works across screen sizes, devices, and assistive technology.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/r-responsive-design/", color: "#B82A91" }
+        C: { name: "Caption Everything", definition: "Video, audio, and embedded media must have accurate captions and transcripts.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/c-caption-everything/", color: "#0095C8", ink: "#006A94" },
+        L: { name: "Logical Layout", definition: "Use proper heading hierarchy, slide titles, semantic structure, and predictable navigation.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/l-logical-layout/", color: "#51237F", ink: "#51237F" },
+        E: { name: "Easy to Read", definition: "Use readable fonts and sizes, sufficient color contrast, plain language, short paragraphs, and chunked content.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/e-easy-to-read/", color: "#FBA93E", ink: "#8A5A00" },
+        A: { name: "Alt Text for Images", definition: "Provide meaningful image descriptions; mark decorative images as such.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/a-alt-text-for-images/", color: "#00AC9B", ink: "#0A7065" },
+        R: { name: "Responsive Design", definition: "Content works across screen sizes, devices, and assistive technology.", link: "https://pressbooks.montgomerycollege.edu/clear/chapter/r-responsive-design/", color: "#B82A91", ink: "#B82A91" }
     };
     var STRAND_ORDER = ["C", "L", "E", "A", "R"];
     var FRAMEWORK_CITATION = "Grounded in the CLEAR Framework by Dr. Paul D. Miller, Ed.D., Montgomery College Center for Teaching and Learning.";
@@ -170,20 +172,45 @@
                 return res.json();
             })
             .then(function (result) {
+                var announcement;
                 if (result.claude_available && result.findings.length) {
                     mergeAiFindings(result.findings);
                     aiState = "done";
+                    announcement = result.findings.length + " AI coaching suggestion" + (result.findings.length !== 1 ? "s" : "") + " added to the report.";
                 } else {
                     aiState = result.claude_available ? "done" : "unavailable";
+                    announcement = result.claude_available
+                        ? "AI review finished with no additional suggestions."
+                        : "AI suggestions were not available. The report shows automated rule checks only.";
                 }
-                renderReport(reportData);
-                restoreMediaSelection();
+                rerenderPreservingContext(announcement);
             })
             .catch(function () {
                 aiState = "unavailable";
-                renderReport(reportData);
-                restoreMediaSelection();
+                rerenderPreservingContext("AI suggestions were not available. The report shows automated rule checks only.");
             });
+    }
+
+    function rerenderPreservingContext(announcement) {
+        // Re-rendering replaces the report DOM; keep the user's place:
+        // remember the focused element's id and restore it afterwards, and
+        // announce what changed via the persistent live region.
+        var focusedId = document.activeElement ? document.activeElement.id : "";
+        renderReport(reportData);
+        restoreMediaSelection();
+        if (focusedId) {
+            var el = document.getElementById(focusedId);
+            if (el) el.focus();
+        }
+        announce(announcement);
+    }
+
+    function announce(msg) {
+        var region = document.getElementById("sr-announcer");
+        if (!region) return;
+        region.textContent = "";
+        // Brief delay so repeat announcements with identical text still fire.
+        setTimeout(function () { region.textContent = msg; }, 80);
     }
 
     function mergeAiFindings(findings) {
@@ -275,10 +302,11 @@
             var info = STRAND_DEFINITIONS[key];
             var isClear = strand.total === 0;
             var chipGold = (key === "E") ? " on-gold" : "";
-            html.push('<button class="strand-chip' + (isClear ? ' clear' : '') + '" style="--chip-color:' + info.color + '" data-jump="' + key + '" aria-label="' + info.name + ': ' + strand.total + ' findings">');
-            html.push('<span class="strand-chip-letter' + chipGold + '">' + key + '</span>');
-            html.push('<div class="strand-chip-count">' + (isClear ? '✓' : strand.total) + '</div>');
-            html.push('<div class="strand-chip-label">' + key + '</div>');
+            var countLabel = isClear ? "no issues found" : strand.total + " item" + (strand.total !== 1 ? "s" : "") + " to review";
+            html.push('<button class="strand-chip' + (isClear ? ' clear' : '') + '" style="--chip-color:' + info.color + ';--strand-ink:' + info.ink + '" data-jump="' + key + '" aria-label="' + info.name + ': ' + countLabel + '">');
+            html.push('<span class="strand-chip-letter' + chipGold + '" aria-hidden="true">' + key + '</span>');
+            html.push('<div class="strand-chip-count" aria-hidden="true">' + (isClear ? '✓' : strand.total) + '</div>');
+            html.push('<div class="strand-chip-label" aria-hidden="true">' + key + '</div>');
             html.push('</button>');
         });
         html.push('</div>');
@@ -295,14 +323,18 @@
             var isOpen = strand.total > 0;
             var goldClass = (key === "E") ? " on-gold" : "";
 
-            html.push('<section class="strand-card' + (isOpen ? ' open' : '') + '" id="strand-' + key + '" style="--strand-color:' + info.color + '" aria-labelledby="strand-heading-' + key + '">');
-            html.push('<button class="strand-header" id="strand-heading-' + key + '" aria-expanded="' + isOpen + '" aria-controls="strand-body-' + key + '" onclick="this.parentElement.classList.toggle(\'open\'); this.setAttribute(\'aria-expanded\', this.parentElement.classList.contains(\'open\'))">');
+            html.push('<section class="strand-card' + (isOpen ? ' open' : '') + '" id="strand-' + key + '" style="--strand-color:' + info.color + ';--strand-ink:' + info.ink + '" aria-labelledby="strand-heading-' + key + '">');
+            // The button is wrapped in an <h3> so screen reader users can jump
+            // between strands with heading navigation.
+            html.push('<h3 class="strand-h">');
+            html.push('<button class="strand-header" id="strand-heading-' + key + '" aria-expanded="' + isOpen + '" aria-controls="strand-body-' + key + '" onclick="this.closest(\'.strand-card\').classList.toggle(\'open\'); this.setAttribute(\'aria-expanded\', this.closest(\'.strand-card\').classList.contains(\'open\'))">');
             html.push('<span class="strand-header-left">');
-            html.push('<span class="strand-letter' + goldClass + '">' + key + '</span>');
+            html.push('<span class="strand-letter' + goldClass + '" aria-hidden="true">' + key + '</span>');
             html.push('<span><span class="strand-name">' + info.name + '</span><br><span class="strand-count">' + (strand.total === 0 ? 'No issues found' : strand.total + ' item' + (strand.total !== 1 ? 's' : '') + ' to review') + '</span></span>');
             html.push('</span>');
             html.push('<svg class="strand-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>');
             html.push('</button>');
+            html.push('</h3>');
 
             html.push('<div class="strand-body" id="strand-body-' + key + '">');
             html.push('<p class="strand-definition">' + info.definition + '</p>');

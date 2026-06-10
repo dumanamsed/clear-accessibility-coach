@@ -514,13 +514,18 @@ textarea:focus {
     justify-content: center;
     width: 32px; height: 32px;
     border-radius: 9px;
-    background: var(--chip-color, var(--primary));
+    /* ink (darkened) variant: white-on-ink clears WCAG AA 4.5:1; the
+       full-brightness brand color stays on the decorative chip border. */
+    background: var(--strand-ink, var(--primary));
     color: #fff;
     font-weight: 700;
     font-size: 0.95rem;
     margin-bottom: 6px;
 }
-.strand-chip-letter.on-gold { color: var(--mc-purple-darker); }
+.strand-chip-letter.on-gold {
+    background: var(--chip-color);  /* gold badge keeps brand gold... */
+    color: var(--mc-purple-darker); /* ...with dark text (8.4:1) */
+}
 .strand-chip-count { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); line-height: 1; }
 .strand-chip-label { font-size: 0.68rem; color: var(--text-secondary); margin-top: 3px; letter-spacing: 0.02em; text-transform: uppercase; }
 .strand-chip.clear .strand-chip-count { color: var(--tip); }
@@ -557,21 +562,30 @@ textarea:focus {
 
 .strand-header-left { display: flex; align-items: center; gap: 14px; flex: 1; }
 
+/* The accordion heading wrapper: real <h3> for screen reader navigation,
+   with all heading styling stripped so the button renders unchanged. */
+.strand-h { margin: 0; font-size: inherit; font-weight: inherit; }
+
 .strand-letter {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 42px; height: 42px;
     border-radius: 11px;
-    background: var(--strand-color, var(--primary));
+    /* ink variant: white-on-ink clears WCAG AA; brand color stays on the
+       decorative card border. */
+    background: var(--strand-ink, var(--primary));
     color: #fff;
     font-weight: 700;
     font-size: 1.15rem;
     flex-shrink: 0;
     box-shadow: 0 3px 8px rgba(45, 18, 71, 0.18);
 }
-/* Aspire Gold needs dark text for contrast (it's the E strand) */
-.strand-letter.on-gold { color: var(--mc-purple-darker); }
+/* E strand: brand gold badge with dark purple text (8.4:1) */
+.strand-letter.on-gold {
+    background: var(--strand-color);
+    color: var(--mc-purple-darker);
+}
 
 .strand-name { font-size: 1.08rem; font-weight: 600; color: var(--text-primary); }
 .strand-count { font-size: 0.85rem; color: var(--text-secondary); font-weight: 500; }
@@ -677,7 +691,8 @@ textarea:focus {
 
 .strand-learn-more { font-size: 0.85rem; margin-top: 14px; }
 .strand-learn-more a {
-    color: var(--strand-color, var(--primary));
+    /* ink variant — full-brightness gold/blue/green fail 4.5:1 as link text */
+    color: var(--strand-ink, var(--primary));
     text-decoration: none;
     font-weight: 600;
     display: inline-flex;
@@ -748,17 +763,18 @@ textarea:focus {
     cursor: pointer;
     transition: all 0.15s var(--ease);
 }
-.media-btn:hover { border-color: var(--mc-blue); color: var(--mc-blue); }
+/* #006A94 is the AA-compliant ink variant of MC Blue (6.0:1 vs white) */
+.media-btn:hover { border-color: var(--mc-blue); color: #006A94; }
 .media-btn:focus-visible { outline: none; box-shadow: var(--ring); }
 .media-btn.selected {
-    background: var(--mc-blue);
+    background: #006A94;
     color: #fff;
-    border-color: var(--mc-blue);
+    border-color: #006A94;
     box-shadow: 0 3px 10px rgba(0,149,200,0.3);
 }
 .media-response { margin-top: 18px; font-size: 0.93rem; display: none; line-height: 1.6; }
 .media-response.visible { display: block; animation: fade-in 0.25s var(--ease); }
-.media-response a { color: var(--mc-blue); font-weight: 600; }
+.media-response a { color: #006A94; font-weight: 600; }
 .media-response ul { margin: 8px 0 0 20px; color: var(--text-secondary); }
 .media-response li { margin-bottom: 4px; }
 

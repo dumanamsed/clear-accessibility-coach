@@ -133,13 +133,21 @@ def export_pdf():
     )
 
     # Prefer a true server-side PDF (WeasyPrint works on Linux hosts like
-    # Render). On machines without its native libraries (e.g. macOS without
-    # Homebrew), fall back to returning the print-styled HTML — the client
-    # detects the content type and opens the browser print dialog instead.
+    # Render). The report must model what it preaches, so we request the
+    # PDF/UA-1 variant — a TAGGED, screen-reader-navigable PDF with the
+    # document language and title set. If the installed WeasyPrint doesn't
+    # support the variant, fall back to a plain PDF; if its native libraries
+    # are missing entirely (e.g. macOS without Homebrew), fall back to the
+    # print-styled HTML — the client detects the content type and opens the
+    # browser print dialog instead.
     try:
         from weasyprint import HTML as WeasyHTML
 
-        pdf_bytes = WeasyHTML(string=html_content).write_pdf()
+        doc = WeasyHTML(string=html_content)
+        try:
+            pdf_bytes = doc.write_pdf(pdf_variant="pdf/ua-1")
+        except Exception:
+            pdf_bytes = doc.write_pdf()
         return Response(
             pdf_bytes,
             mimetype="application/pdf",
