@@ -7,39 +7,44 @@ PRESSBOOK_BASE = "https://pressbooks.montgomerycollege.edu/clear"
 # both as text on white and as a background under white text — use it anywhere
 # the strand color touches text. (MC Blue, Edge Green, and Aspire Gold all
 # fail 4.5:1 at full brightness; MC's own brand guide mandates AA contrast.)
+# Strand names, definitions, and links are drawn from the published Pressbook
+# ("The Clear Framework: Digital Accessibility" © Paul Miller, CC BY-NC).
+# Definitions use each strand's official subtitle and signature line. Links
+# point to the strand introduction pages, which live at /part/<slug>/ —
+# NOT /chapter/<slug>/ (those resolve to self-assessment quizzes or 404).
 STRAND_DEFINITIONS = {
     "C": {
         "name": "Caption Everything",
-        "definition": "Video, audio, and embedded media must have accurate captions and transcripts.",
-        "link": f"{PRESSBOOK_BASE}/chapter/c-caption-everything/",
+        "definition": "Making multimedia accessible to every learner: accurate captions for all video, transcripts for audio-only content, and meaningful sound cues included.",
+        "link": f"{PRESSBOOK_BASE}/part/c-caption-everything/",
         "color": "#0095C8",  # MC Blue
         "ink": "#006A94",    # 6.0:1 vs white
     },
     "L": {
         "name": "Logical Layout",
-        "definition": "Use proper heading hierarchy, slide titles, semantic structure, and predictable navigation.",
-        "link": f"{PRESSBOOK_BASE}/chapter/l-logical-layout/",
+        "definition": "Designing navigation that reduces confusion and cognitive load: predictable structure, headings in the correct order, and consistent organization. Clarity is an accessibility feature.",
+        "link": f"{PRESSBOOK_BASE}/part/l-logical-layout/",
         "color": "#51237F",  # MC Purple
         "ink": "#51237F",    # already 11.1:1
     },
     "E": {
         "name": "Easy to Read",
-        "definition": "Use readable fonts and sizes, sufficient color contrast, plain language, short paragraphs, and chunked content.",
-        "link": f"{PRESSBOOK_BASE}/chapter/e-easy-to-read/",
+        "definition": "Writing and formatting that supports comprehension: readable fonts, sufficient contrast, plain language, and short, digestible sections. Readability is access.",
+        "link": f"{PRESSBOOK_BASE}/part/e-easy-to-read/",
         "color": "#FBA93E",  # Aspire Gold
         "ink": "#8A5A00",    # 5.9:1 vs white (full gold is 1.9:1 — never use as text)
     },
     "A": {
         "name": "Alt Text for Images",
-        "definition": "Provide meaningful image descriptions; mark decorative images as such.",
-        "link": f"{PRESSBOOK_BASE}/chapter/a-alt-text-for-images/",
+        "definition": "Ensuring visual information is not lost: meaningful descriptions for instructional images, with decorative images marked so screen readers can skip them. Alt text is a teaching choice.",
+        "link": f"{PRESSBOOK_BASE}/part/a-alt-text-for-images/",
         "color": "#00AC9B",  # Edge Green
         "ink": "#0A7065",    # 6.0:1 vs white
     },
     "R": {
         "name": "Responsive Design",
-        "definition": "Content works across screen sizes, devices, and assistive technology.",
-        "link": f"{PRESSBOOK_BASE}/chapter/r-responsive-design/",
+        "definition": "Designing for learning across devices: content that flows cleanly on phones and laptops alike, resizes properly, and avoids images of text. Device access is equity access.",
+        "link": f"{PRESSBOOK_BASE}/part/r-responsive-design/",
         "color": "#B82A91",  # Future Fuchsia
         "ink": "#B82A91",    # already 5.6:1
     },
