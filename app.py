@@ -109,9 +109,11 @@ def ai_review():
         body_sample=ctx.get("body_sample", ""),
     )
 
+    # None = the AI pass failed/was unavailable. An EMPTY list is a success:
+    # the review ran and the document needed no extra coaching.
     return jsonify({
-        "claude_available": bool(claude_findings),
-        "findings": [f.to_dict() for f in claude_findings],
+        "claude_available": claude_findings is not None,
+        "findings": [f.to_dict() for f in (claude_findings or [])],
     })
 
 

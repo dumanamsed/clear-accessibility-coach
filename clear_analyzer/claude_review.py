@@ -54,9 +54,13 @@ def run_claude_review(
     alt_texts: list[str],
     rule_findings: list[Finding],
     body_sample: str,
-) -> list[Finding]:
+) -> "list[Finding] | None":
+    """Returns a list of AI findings — possibly EMPTY, which means the review
+    succeeded and found nothing extra (a clean document). Returns None only
+    when the AI pass itself was unavailable (no key / API error), so callers
+    can tell "clean" apart from "failed"."""
     if not ANTHROPIC_API_KEY:
-        return []
+        return None
 
     summary = _build_summary(file_type, outline, alt_texts, rule_findings, body_sample)
 
@@ -107,7 +111,7 @@ def run_claude_review(
             file=sys.stderr,
             flush=True,
         )
-        return []
+        return None
 
 
 def _build_summary(file_type, outline, alt_texts, rule_findings, body_sample):

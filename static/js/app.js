@@ -133,10 +133,16 @@
     var aiState = "disabled";
     var mediaSelection = null;
 
+    // The rule pass returns in milliseconds. Hold the analyzing screen for a
+    // moment anyway: without it the report appears to "pop in" instantly with
+    // preliminary numbers, which users read as an (often wrong) final verdict.
+    var MIN_ANALYZING_MS = 1800;
+
     function submitAnalysis(formData) {
         showScreen("analyzing");
         startAnalyzingMessages();
         mediaSelection = null;
+        var startedAt = Date.now();
 
         fetch("/analyze", { method: "POST", body: formData })
             .then(function (res) {
@@ -146,9 +152,12 @@
             .then(function (data) {
                 reportData = data;
                 aiState = data.claude_enabled ? "pending" : "disabled";
-                renderReport(data);
-                showScreen("report");
-                if (aiState === "pending") startAiReview(data);
+                var remaining = Math.max(0, MIN_ANALYZING_MS - (Date.now() - startedAt));
+                setTimeout(function () {
+                    renderReport(data);
+                    showScreen("report");
+                    if (aiState === "pending") startAiReview(data);
+                }, remaining);
             })
             .catch(function (err) {
                 showScreen("upload");
@@ -286,7 +295,19 @@
         html.push('<div class="report-header">');
         html.push('<h2 class="report-title">CLEAR Accessibility Report</h2>');
         html.push('<p class="report-filename">' + escapeHtml(data.filename) + '</p>');
-        html.push('<p class="report-summary">' + data.total_findings + ' item' + (data.total_findings !== 1 ? 's' : '') + ' to review across ' + data.strands_with_findings + ' of 5 CLEAR strands.</p>');
+        // While the AI pass is running, the numbers are preliminary — phrase
+        // them that way so an early "0 items" doesn't read as a final verdict.
+        var summaryText;
+        if (aiState === "pending") {
+            summaryText = data.total_findings === 0
+                ? "Automated checks passed — AI coaching review in progress…"
+                : data.total_findings + " item" + (data.total_findings !== 1 ? "s" : "") + " found so far — AI coaching review in progress…";
+        } else if (data.total_findings === 0) {
+            summaryText = "No issues found across all 5 CLEAR strands. Nice work!";
+        } else {
+            summaryText = data.total_findings + " item" + (data.total_findings !== 1 ? "s" : "") + " to review across " + data.strands_with_findings + " of 5 CLEAR strands.";
+        }
+        html.push('<p class="report-summary">' + summaryText + '</p>');
         html.push('<p class="report-citation">' + FRAMEWORK_CITATION + '</p>');
         if (aiState === "pending") {
             html.push('<p class="report-claude-notice ai-pending" role="status"><span class="ai-pulse" aria-hidden="true"></span>AI coaching suggestions are being generated — they will appear below shortly.</p>');
@@ -301,11 +322,17 @@
             var strand = data.strands[key];
             var info = STRAND_DEFINITIONS[key];
             var isClear = strand.total === 0;
+            var pending = aiState === "pending";
             var chipGold = (key === "E") ? " on-gold" : "";
-            var countLabel = isClear ? "no issues found" : strand.total + " item" + (strand.total !== 1 ? "s" : "") + " to review";
-            html.push('<button class="strand-chip' + (isClear ? ' clear' : '') + '" style="--chip-color:' + info.color + ';--strand-ink:' + info.ink + '" data-jump="' + key + '" aria-label="' + info.name + ': ' + countLabel + '">');
+            // No checkmark until the AI verdict is in — "…" signals the strand
+            // is still under review rather than confirmed clean.
+            var countDisplay = isClear ? (pending ? "…" : "✓") : strand.total;
+            var countLabel = isClear
+                ? (pending ? "review in progress" : "no issues found")
+                : strand.total + " item" + (strand.total !== 1 ? "s" : "") + " to review";
+            html.push('<button class="strand-chip' + (isClear && !pending ? ' clear' : '') + '" style="--chip-color:' + info.color + ';--strand-ink:' + info.ink + '" data-jump="' + key + '" aria-label="' + info.name + ': ' + countLabel + '">');
             html.push('<span class="strand-chip-letter' + chipGold + '" aria-hidden="true">' + key + '</span>');
-            html.push('<div class="strand-chip-count" aria-hidden="true">' + (isClear ? '✓' : strand.total) + '</div>');
+            html.push('<div class="strand-chip-count" aria-hidden="true">' + countDisplay + '</div>');
             html.push('<div class="strand-chip-label" aria-hidden="true">' + key + '</div>');
             html.push('</button>');
         });
@@ -330,7 +357,10 @@
             html.push('<button class="strand-header" id="strand-heading-' + key + '" aria-expanded="' + isOpen + '" aria-controls="strand-body-' + key + '" onclick="this.closest(\'.strand-card\').classList.toggle(\'open\'); this.setAttribute(\'aria-expanded\', this.closest(\'.strand-card\').classList.contains(\'open\'))">');
             html.push('<span class="strand-header-left">');
             html.push('<span class="strand-letter' + goldClass + '" aria-hidden="true">' + key + '</span>');
-            html.push('<span><span class="strand-name">' + info.name + '</span><br><span class="strand-count">' + (strand.total === 0 ? 'No issues found' : strand.total + ' item' + (strand.total !== 1 ? 's' : '') + ' to review') + '</span></span>');
+            var subText = strand.total === 0
+                ? (aiState === "pending" ? "No issues so far" : "No issues found")
+                : strand.total + " item" + (strand.total !== 1 ? "s" : "") + " to review";
+            html.push('<span><span class="strand-name">' + info.name + '</span><br><span class="strand-count">' + subText + '</span></span>');
             html.push('</span>');
             html.push('<svg class="strand-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>');
             html.push('</button>');
@@ -340,7 +370,9 @@
             html.push('<p class="strand-definition">' + info.definition + '</p>');
 
             if (strand.total === 0) {
-                html.push('<p class="no-findings-text">No issues detected for this strand. Nice work!</p>');
+                html.push('<p class="no-findings-text">' + (aiState === "pending"
+                    ? "No rule-based issues detected. The AI coaching review may add suggestions shortly."
+                    : "No issues detected for this strand. Nice work!") + '</p>');
             } else {
                 html.push('<div class="strand-badges">');
                 if (strand.critical) html.push('<span class="badge badge-critical">' + strand.critical + ' critical</span>');
