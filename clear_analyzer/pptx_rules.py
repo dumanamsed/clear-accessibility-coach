@@ -3,7 +3,9 @@ from io import BytesIO
 from pptx import Presentation
 from pptx.util import Pt
 from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.enum.text import PP_ALIGN
 from .models import Finding
+from .contrast import office_rgb, contrast_ratio, required_ratio, is_near
 
 # Common image file extensions
 _IMAGE_EXT_RE = re.compile(
@@ -37,8 +39,94 @@ def analyze_pptx(file_bytes: bytes) -> list[Finding]:
         _check_media(slide, loc, findings)
         _check_text(slide, loc, findings)
         _check_reading_order(slide, loc, findings)
+        _check_justified(slide, loc, findings)
+        _check_text_contrast(slide, loc, findings)
 
     return findings
+
+
+def _solid_rgb(fill):
+    """Return an explicit solid-fill RGB for a fill, or None if it's themed,
+    gradient, picture, or otherwise not a concrete RGB we can evaluate."""
+    try:
+        from pptx.enum.dml import MSO_FILL
+        if fill.type != MSO_FILL.SOLID:
+            return None
+        return office_rgb(fill.fore_color.rgb)
+    except Exception:
+        return None
+
+
+def _slide_bg_rgb(slide):
+    """Best-effort: the slide's own solid background fill, if explicitly set."""
+    try:
+        bg = slide.background
+        return _solid_rgb(bg.fill)
+    except Exception:
+        return None
+
+
+def _check_text_contrast(slide, loc, findings):
+    """WCAG 1.4.3 for slides. Contrast on slides is genuinely hard because
+    backgrounds are often theme- or layout-driven; to stay false-positive-free
+    we ONLY evaluate a run when BOTH its font color AND the background behind it
+    (the shape's own solid fill, else the slide's solid background) are explicit
+    RGB values. Themed colors are skipped rather than guessed."""
+    slide_bg = _slide_bg_rgb(slide)
+    flagged = 0
+    for shape in slide.shapes:
+        if flagged >= 3 or not getattr(shape, "has_text_frame", False):
+            continue
+        shape_bg = _solid_rgb(shape.fill) if hasattr(shape, "fill") else None
+        bg = shape_bg or slide_bg
+        if bg is None:
+            continue
+        for para in shape.text_frame.paragraphs:
+            for run in para.runs:
+                if not run.text.strip():
+                    continue
+                try:
+                    fg = office_rgb(run.font.color.rgb) if run.font.color and run.font.color.type is not None else None
+                except Exception:
+                    fg = None
+                if fg is None:
+                    continue
+                size = run.font.size.pt if run.font.size else None
+                font_px = size * 1.333 if size else None
+                ratio = contrast_ratio(fg, bg)
+                needed = required_ratio(font_px, bool(run.font.bold))
+                if ratio + 0.05 < needed:
+                    findings.append(Finding(
+                        strand="E",
+                        severity="warning",
+                        location=loc,
+                        issue=f"Text color #%02X%02X%02X has only {ratio:.1f}:1 contrast against its "
+                              f"background #%02X%02X%02X, below the WCAG 2.2 AA minimum of {needed:g}:1 "
+                              f"(Success Criterion 1.4.3)." % (fg[0], fg[1], fg[2], bg[0], bg[1], bg[2]),
+                        evidence=run.text.strip()[:80],
+                    ))
+                    flagged += 1
+                    break
+            if flagged >= 3:
+                break
+
+
+def _check_justified(slide, loc, findings):
+    """CLEAR Easy to Read: prefer left-aligned over justified text."""
+    for shape in slide.shapes:
+        if not getattr(shape, "has_text_frame", False):
+            continue
+        for para in shape.text_frame.paragraphs:
+            if para.alignment == PP_ALIGN.JUSTIFY and len(para.text.split()) > 10:
+                findings.append(Finding(
+                    strand="E",
+                    severity="tip",
+                    location=loc,
+                    issue="Text is justified, which creates uneven word spacing that is harder "
+                          "to read. CLEAR recommends left-aligned text.",
+                    evidence=para.text.strip()[:80],
+                ))
+                return  # one per slide is enough
 
 
 def _check_reading_order(slide, loc, findings):

@@ -2,7 +2,9 @@ import re
 from io import BytesIO
 from docx import Document
 from docx.oxml.ns import qn
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from .models import Finding
+from .contrast import office_rgb, contrast_ratio, required_ratio, is_near
 
 _IMAGE_EXT_RE = re.compile(
     r"^.+\.(png|jpg|jpeg|gif|bmp|tiff|tif|svg|webp|ico|emf|wmf)$",
@@ -30,8 +32,69 @@ def analyze_docx(file_bytes: bytes) -> list[Finding]:
     _check_tables(doc, findings)
     _check_small_fonts(doc, findings)
     _check_all_caps(doc, findings)
+    _check_text_contrast(doc, findings)
+    _check_justified(doc, findings)
 
     return findings
+
+
+def _check_text_contrast(doc, findings, max_flags=5):
+    """WCAG 1.4.3: flag runs whose explicit font color has poor contrast against
+    a white page. We only evaluate runs with an explicitly set color (most body
+    text is 'automatic'/black and is skipped), and treat near-black as black so
+    normal text never false-positives. Page background is assumed white — the
+    Word default — which is the realistic case for the vast majority of docs."""
+    WHITE = (255, 255, 255)
+    flagged = 0
+    for i, para in enumerate(doc.paragraphs, 1):
+        if flagged >= max_flags:
+            break
+        for run in para.runs:
+            if not run.text.strip():
+                continue
+            try:
+                rgb = office_rgb(run.font.color.rgb) if run.font.color and run.font.color.rgb else None
+            except (AttributeError, TypeError):
+                rgb = None
+            if rgb is None or is_near(rgb, (0, 0, 0), tol=40):
+                continue  # automatic/black/near-black text on white is fine
+            size_pt = run.font.size.pt if run.font.size else None
+            font_px = size_pt * 1.333 if size_pt else None
+            ratio = contrast_ratio(rgb, WHITE)
+            needed = required_ratio(font_px, bool(run.font.bold))
+            if ratio + 0.05 < needed:
+                hexc = "#%02X%02X%02X" % rgb
+                findings.append(Finding(
+                    strand="E",
+                    severity="warning",
+                    location=f"Paragraph {i}",
+                    issue=f"Text color {hexc} has only {ratio:.1f}:1 contrast against a white "
+                          f"page, below the WCAG 2.2 AA minimum of {needed:g}:1 "
+                          f"(Success Criterion 1.4.3).",
+                    evidence=run.text.strip()[:80],
+                ))
+                flagged += 1
+                break
+
+
+def _check_justified(doc, findings, max_flags=3):
+    """CLEAR Easy to Read: prefer left-aligned over justified text — justification
+    creates uneven word spacing that is harder to read, especially for dyslexic
+    readers."""
+    flagged = 0
+    for i, para in enumerate(doc.paragraphs, 1):
+        if flagged >= max_flags:
+            break
+        if para.alignment == WD_ALIGN_PARAGRAPH.JUSTIFY and len(para.text.split()) > 12:
+            findings.append(Finding(
+                strand="E",
+                severity="tip",
+                location=f"Paragraph {i}",
+                issue="Paragraph is fully justified, which creates uneven word spacing that is "
+                      "harder to read. CLEAR recommends left-aligned text.",
+                evidence=para.text.strip()[:80],
+            ))
+            flagged += 1
 
 
 def _check_small_fonts(doc, findings, max_flags=5):

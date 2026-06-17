@@ -1,6 +1,7 @@
 import re
 from bs4 import BeautifulSoup
 from .models import Finding
+from .contrast import parse_color, contrast_ratio, required_ratio
 
 _IMAGE_EXT_RE = re.compile(
     r"^.+\.(png|jpg|jpeg|gif|bmp|tiff|tif|svg|webp|ico|emf|wmf)$",
@@ -26,6 +27,8 @@ def analyze_html(content: str) -> list[Finding]:
     _check_links(soup, findings)
     _check_media(soup, findings)
     _check_contrast(soup, findings)
+    _check_use_of_color(soup, findings)
+    _check_justified(soup, findings)
     _check_viewport(soup, findings)
     _check_lang(soup, findings)
     _check_tables(soup, findings)
@@ -206,27 +209,191 @@ def _check_media(soup, findings):
             ))
 
 
+def _style_props(style: str) -> dict:
+    """Parse a CSS declaration string into a {prop: value} dict."""
+    props = {}
+    for decl in style.split(";"):
+        if ":" in decl:
+            k, v = decl.split(":", 1)
+            props[k.strip().lower()] = v.strip()
+    return props
+
+
+def _font_px(props: dict):
+    """Best-effort font size in px from a style dict (pt/px/em/rem/%)."""
+    fs = props.get("font-size")
+    if not fs:
+        return None
+    m = re.match(r"([\d.]+)\s*(px|pt|em|rem|%)?", fs.strip(), re.IGNORECASE)
+    if not m:
+        return None
+    val = float(m.group(1)); unit = (m.group(2) or "px").lower()
+    if unit == "px":
+        return val
+    if unit == "pt":
+        return val * 1.333
+    if unit in ("em", "rem"):
+        return val * 16.0
+    if unit == "%":
+        return val / 100.0 * 16.0
+    return None
+
+
+def _is_bold(props: dict) -> bool:
+    w = props.get("font-weight", "").strip().lower()
+    return w in ("bold", "bolder", "600", "700", "800", "900")
+
+
+def _stylesheet_rules(soup):
+    """Pull color/background/text-decoration declarations out of <style> blocks,
+    keyed by selector. We can't resolve the full cascade without a browser, but
+    a single rule that sets BOTH a text color and a background is self-contained
+    and a common source of low-contrast text — worth checking."""
+    rules = []
+    for style_tag in soup.find_all("style"):
+        css = style_tag.get_text() or ""
+        css = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
+        for m in re.finditer(r"([^{}]+)\{([^{}]+)\}", css):
+            selector = m.group(1).strip()
+            rules.append((selector, _style_props(m.group(2))))
+    return rules
+
+
+def _evaluate_contrast(fg_raw, bg_raw, props, location, evidence, findings):
+    fg_rgb = parse_color(fg_raw)
+    bg_rgb = parse_color(bg_raw, over=(255, 255, 255))
+    if not fg_rgb or not bg_rgb:
+        return
+    ratio = contrast_ratio(fg_rgb, bg_rgb)
+    needed = required_ratio(_font_px(props), _is_bold(props))
+    if ratio + 0.05 < needed:
+        size_note = "large text" if needed == 3.0 else "normal text"
+        findings.append(Finding(
+            strand="E",
+            severity="warning",
+            location=location,
+            issue=f"Color contrast is {ratio:.1f}:1, below the WCAG 2.2 AA minimum "
+                  f"of {needed:g}:1 for {size_note} (Success Criterion 1.4.3, Contrast Minimum).",
+            evidence=evidence,
+        ))
+
+
 def _check_contrast(soup, findings):
+    # 1) Inline styles that set a text color and a background together.
     for elem in soup.find_all(style=True):
-        style = elem.get("style", "")
-        color_match = re.search(r"(?:^|;)\s*color\s*:\s*([^;]+)", style)
-        bg_match = re.search(r"background(?:-color)?\s*:\s*([^;]+)", style)
-        if color_match and bg_match:
-            fg = color_match.group(1).strip()
-            bg = bg_match.group(1).strip()
-            fg_rgb = _parse_color(fg)
-            bg_rgb = _parse_color(bg)
-            if fg_rgb and bg_rgb:
-                ratio = _contrast_ratio(fg_rgb, bg_rgb)
-                if ratio < 4.5:
-                    text_preview = elem.get_text(strip=True)[:60]
-                    findings.append(Finding(
-                        strand="E",
-                        severity="warning",
-                        location=f"Element with text: \"{text_preview}\"",
-                        issue=f"Inline color contrast ratio is {ratio:.1f}:1, below WCAG AA minimum of 4.5:1.",
-                        evidence=f"color: {fg}; background: {bg}",
-                    ))
+        props = _style_props(elem.get("style", ""))
+        fg = props.get("color")
+        bg = props.get("background-color") or props.get("background")
+        if fg and bg:
+            preview = elem.get_text(strip=True)[:50]
+            _evaluate_contrast(
+                fg, bg, props,
+                f'Element with text: "{preview}"' if preview else f"<{elem.name}>",
+                f"color: {fg}; background: {bg}", findings,
+            )
+
+    # 2) <style> rules that set both color and background in one declaration.
+    for selector, props in _stylesheet_rules(soup):
+        fg = props.get("color")
+        bg = props.get("background-color") or props.get("background")
+        if fg and bg:
+            _evaluate_contrast(
+                fg, bg, props,
+                f"CSS rule: {selector[:50]}",
+                f"{selector} {{ color: {fg}; background: {bg} }}", findings,
+            )
+
+
+# Phrases that lean on color alone to convey meaning (WCAG 1.4.1).
+_COLOR_REFERENCE_RE = re.compile(
+    r"\b(?:the\s+)?(red|green|blue|yellow|orange|purple|pink|gray|grey)\s+"
+    r"(button|link|text|box|highlight|section|item|tab|circle|dot|square|arrow|line)\b",
+    re.IGNORECASE,
+)
+
+
+def _check_use_of_color(soup, findings):
+    """WCAG 1.4.1 Use of Color (Level A): color must not be the only visual
+    means of conveying information. CLEAR's Easy to Read guidance restates this:
+    'Ensure links are visually distinguishable... with color AND an additional
+    indicator like underlining.'"""
+    # Links stripped of their underline and relying on color alone.
+    decoration_none_selectors = any(
+        "none" in (props.get("text-decoration", "") + props.get("text-decoration-line", "")).lower()
+        and ("a" == sel.strip().lower() or sel.strip().lower().startswith("a"))
+        for sel, props in _stylesheet_rules(soup)
+    )
+    flagged_inline = 0
+    for a in soup.find_all("a", href=True):
+        if not a.get_text(strip=True):
+            continue  # nameless links handled elsewhere
+        props = _style_props(a.get("style", ""))
+        deco = (props.get("text-decoration", "") + props.get("text-decoration-line", "")).lower()
+        inline_no_underline = "none" in deco
+        # A link inside a paragraph that removes its underline relies on color.
+        in_text = a.find_parent(["p", "li", "td", "span", "div"]) is not None
+        if (inline_no_underline or (decoration_none_selectors and props.get("color"))) and in_text and flagged_inline < 5:
+            flagged_inline += 1
+            findings.append(Finding(
+                strand="E",
+                severity="warning",
+                location=f"Link to {a['href'][:50]}",
+                issue="Link removes its underline, so within body text it may be distinguishable "
+                      "by color alone (WCAG 1.4.1, Use of Color). Keep an underline or another "
+                      "non-color indicator.",
+                evidence=a.get_text(strip=True)[:80],
+            ))
+    # Body copy that instructs by color name only.
+    seen = 0
+    for text in soup.find_all(string=_COLOR_REFERENCE_RE):
+        if seen >= 3:
+            break
+        m = _COLOR_REFERENCE_RE.search(str(text))
+        if m:
+            seen += 1
+            findings.append(Finding(
+                strand="E",
+                severity="tip",
+                location="Body text",
+                issue="Instructions appear to reference an element by color alone "
+                      "(WCAG 1.4.1). Add a label, position, or icon so colorblind readers can follow.",
+                evidence=f'"...{m.group(0)}..."',
+            ))
+
+
+def _check_justified(soup, findings):
+    """CLEAR Easy to Read: 'Use left-aligned text rather than justified text.
+    Justified text can create uneven spacing between words, making it harder
+    to read' — especially for dyslexic readers."""
+    flagged = 0
+    seen_selectors = False
+    for sel, props in _stylesheet_rules(soup):
+        if props.get("text-align", "").strip().lower() == "justify":
+            seen_selectors = True
+            break
+    for elem in soup.find_all(style=True):
+        if flagged >= 3:
+            break
+        props = _style_props(elem.get("style", ""))
+        if props.get("text-align", "").strip().lower() == "justify":
+            flagged += 1
+            findings.append(Finding(
+                strand="E",
+                severity="tip",
+                location=f"<{elem.name}>",
+                issue="Text is fully justified, which creates uneven word spacing ('rivers') "
+                      "that is harder to read. CLEAR recommends left-aligned text.",
+                evidence=elem.get_text(strip=True)[:80] or "text-align: justify",
+            ))
+    if seen_selectors and flagged == 0:
+        findings.append(Finding(
+            strand="E",
+            severity="tip",
+            location="Stylesheet",
+            issue="A style rule sets text-align: justify. CLEAR recommends left-aligned "
+                  "text — justification creates uneven spacing that is harder to read.",
+            evidence="text-align: justify",
+        ))
 
 
 def _check_viewport(soup, findings):
@@ -242,39 +409,3 @@ def _check_viewport(soup, findings):
         ))
 
 
-def _parse_color(color_str: str):
-    color_str = color_str.strip().lower()
-    hex_match = re.match(r"^#([0-9a-f]{3,8})$", color_str)
-    if hex_match:
-        hex_val = hex_match.group(1)
-        if len(hex_val) == 3:
-            hex_val = "".join(c * 2 for c in hex_val)
-        if len(hex_val) >= 6:
-            return (int(hex_val[0:2], 16), int(hex_val[2:4], 16), int(hex_val[4:6], 16))
-
-    rgb_match = re.match(r"rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", color_str)
-    if rgb_match:
-        return (int(rgb_match.group(1)), int(rgb_match.group(2)), int(rgb_match.group(3)))
-
-    named = {
-        "white": (255, 255, 255), "black": (0, 0, 0),
-        "red": (255, 0, 0), "yellow": (255, 255, 0),
-        "gray": (128, 128, 128), "grey": (128, 128, 128),
-    }
-    return named.get(color_str)
-
-
-def _relative_luminance(rgb):
-    vals = []
-    for c in rgb:
-        s = c / 255.0
-        vals.append(s / 12.92 if s <= 0.04045 else ((s + 0.055) / 1.055) ** 2.4)
-    return 0.2126 * vals[0] + 0.7152 * vals[1] + 0.0722 * vals[2]
-
-
-def _contrast_ratio(fg_rgb, bg_rgb):
-    l1 = _relative_luminance(fg_rgb)
-    l2 = _relative_luminance(bg_rgb)
-    lighter = max(l1, l2)
-    darker = min(l1, l2)
-    return (lighter + 0.05) / (darker + 0.05)
