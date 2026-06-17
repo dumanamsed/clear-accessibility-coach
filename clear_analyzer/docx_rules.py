@@ -4,7 +4,19 @@ from docx import Document
 from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from .models import Finding
-from .contrast import office_rgb, contrast_ratio, required_ratio, is_near
+from .contrast import contrast_ratio, required_ratio, is_near
+from .theme import docx_theme_map, resolve_docx_color, docx_cell_fill
+
+# Fonts CLEAR's "Easy to Read" calls out as hard to read: decorative/script
+# faces, and a few notoriously low-legibility display fonts. Sans-serif body
+# fonts (Arial, Verdana, Calibri, Open Sans...) are the recommendation.
+_DECORATIVE_FONTS = {
+    "brush script mt", "comic sans ms", "papyrus", "lobster", "pacifico",
+    "vivaldi", "edwardian script itc", "monotype corsiva", "freestyle script",
+    "bradley hand itc", "chiller", "jokerman", "magneto", "curlz mt",
+    "harrington", "mistral", "kunstler script", "blackadder itc", "vladimir script",
+    "french script mt", "rage italic", "script mt bold", "segoe script",
+}
 
 _IMAGE_EXT_RE = re.compile(
     r"^.+\.(png|jpg|jpeg|gif|bmp|tiff|tif|svg|webp|ico|emf|wmf)$",
@@ -30,20 +42,61 @@ def analyze_docx(file_bytes: bytes) -> list[Finding]:
     _check_hyperlinks(doc, findings)
     _check_paragraphs(doc, findings)
     _check_tables(doc, findings)
+    theme_map = docx_theme_map(doc)
     _check_small_fonts(doc, findings)
     _check_all_caps(doc, findings)
-    _check_text_contrast(doc, findings)
+    _check_text_contrast(doc, findings, theme_map)
+    _check_table_contrast(doc, findings, theme_map)
+    _check_fonts(doc, findings)
     _check_justified(doc, findings)
 
     return findings
 
 
-def _check_text_contrast(doc, findings, max_flags=5):
-    """WCAG 1.4.3: flag runs whose explicit font color has poor contrast against
-    a white page. We only evaluate runs with an explicitly set color (most body
-    text is 'automatic'/black and is skipped), and treat near-black as black so
-    normal text never false-positives. Page background is assumed white — the
-    Word default — which is the realistic case for the vast majority of docs."""
+from docx.oxml.ns import qn as _qn
+
+
+def _run_color(run, theme_map):
+    """Effective (r,g,b) of a run's text color, resolving theme colors + tints,
+    or None for automatic/black. Reads the <w:color> element directly so we see
+    theme references python-docx hides behind 'automatic'."""
+    rPr = run._element.find(_qn("w:rPr"))
+    if rPr is None:
+        return None
+    color = rPr.find(_qn("w:color"))
+    if color is None:
+        return None
+    return resolve_docx_color(color, theme_map)
+
+
+def _flag_contrast(rgb, bg, run, location, findings, bg_label=""):
+    if rgb is None or bg is None:
+        return False
+    # Treat text that already contrasts like normal dark-on-light as fine.
+    size_pt = run.font.size.pt if run.font.size else None
+    font_px = size_pt * 1.333 if size_pt else None
+    ratio = contrast_ratio(rgb, bg)
+    needed = required_ratio(font_px, bool(run.font.bold))
+    if ratio + 0.05 < needed:
+        where = bg_label or "a white page"
+        findings.append(Finding(
+            strand="E",
+            severity="warning",
+            location=location,
+            issue=f"Text color #%02X%02X%02X has only {ratio:.1f}:1 contrast against {where}, "
+                  f"below the WCAG 2.2 AA minimum of {needed:g}:1 (Success Criterion 1.4.3). "
+                  f"Light or low-contrast text is hard to read." % rgb,
+            evidence=run.text.strip()[:80],
+        ))
+        return True
+    return False
+
+
+def _check_text_contrast(doc, findings, theme_map, max_flags=5):
+    """WCAG 1.4.3 on body text. Resolves theme colors (incl. light tints) so
+    'light gray' text — the most common real-world failure — is caught. Page
+    background assumed white (the Word default). Near-black is skipped so normal
+    text never false-positives."""
     WHITE = (255, 255, 255)
     flagged = 0
     for i, para in enumerate(doc.paragraphs, 1):
@@ -52,25 +105,66 @@ def _check_text_contrast(doc, findings, max_flags=5):
         for run in para.runs:
             if not run.text.strip():
                 continue
-            try:
-                rgb = office_rgb(run.font.color.rgb) if run.font.color and run.font.color.rgb else None
-            except (AttributeError, TypeError):
-                rgb = None
+            rgb = _run_color(run, theme_map)
             if rgb is None or is_near(rgb, (0, 0, 0), tol=40):
-                continue  # automatic/black/near-black text on white is fine
-            size_pt = run.font.size.pt if run.font.size else None
-            font_px = size_pt * 1.333 if size_pt else None
-            ratio = contrast_ratio(rgb, WHITE)
-            needed = required_ratio(font_px, bool(run.font.bold))
-            if ratio + 0.05 < needed:
-                hexc = "#%02X%02X%02X" % rgb
+                continue
+            if _flag_contrast(rgb, WHITE, run, f"Paragraph {i}", findings):
+                flagged += 1
+                break
+
+
+def _check_table_contrast(doc, findings, theme_map, max_flags=4):
+    """WCAG 1.4.3 inside tables: light cell shading behind text, or light text
+    on a cell fill. Resolves both the text color AND the cell's shading fill."""
+    WHITE = (255, 255, 255)
+    flagged = 0
+    for ti, table in enumerate(doc.tables, 1):
+        if flagged >= max_flags:
+            break
+        for ri, row in enumerate(table.rows, 1):
+            for ci, cell in enumerate(row.cells, 1):
+                fill = docx_cell_fill(cell._tc, theme_map)
+                bg = fill or WHITE
+                for para in cell.paragraphs:
+                    for run in para.runs:
+                        if not run.text.strip():
+                            continue
+                        rgb = _run_color(run, theme_map)
+                        # If text is default/black, only a dark fill is a problem.
+                        if rgb is None or is_near(rgb, (0, 0, 0), tol=40):
+                            rgb = (0, 0, 0)
+                        loc = f"Table {ti}, row {ri}, col {ci}"
+                        label = ("the cell fill #%02X%02X%02X" % fill) if fill else "a white page"
+                        if _flag_contrast(rgb, bg, run, loc, findings, label):
+                            flagged += 1
+                            break
+                    if flagged >= max_flags:
+                        break
+                if flagged >= max_flags:
+                    break
+
+
+def _check_fonts(doc, findings, max_flags=3):
+    """CLEAR Easy to Read: 'Use sans-serif fonts such as Arial, Verdana, or Open
+    Sans... easier to read than decorative or script fonts.' Flags decorative /
+    script faces used for real text."""
+    flagged = 0
+    seen = set()
+    for i, para in enumerate(doc.paragraphs, 1):
+        if flagged >= max_flags:
+            break
+        for run in para.runs:
+            name = (run.font.name or "")
+            key = name.lower().strip()
+            if key in _DECORATIVE_FONTS and len(run.text.strip()) >= 3 and key not in seen:
+                seen.add(key)
                 findings.append(Finding(
                     strand="E",
-                    severity="warning",
+                    severity="tip",
                     location=f"Paragraph {i}",
-                    issue=f"Text color {hexc} has only {ratio:.1f}:1 contrast against a white "
-                          f"page, below the WCAG 2.2 AA minimum of {needed:g}:1 "
-                          f"(Success Criterion 1.4.3).",
+                    issue=f"The font \"{name}\" is decorative/script, which is hard to read in body "
+                          f"text. CLEAR recommends clean sans-serif fonts such as Arial, Verdana, "
+                          f"or Calibri.",
                     evidence=run.text.strip()[:80],
                 ))
                 flagged += 1

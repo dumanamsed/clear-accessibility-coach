@@ -17,6 +17,14 @@ _WEAK_ALT_PATTERNS = [
     re.compile(r"^chart\s*\d*$", re.IGNORECASE),
 ]
 
+_DECORATIVE_FONTS = {
+    "brush script mt", "comic sans ms", "papyrus", "lobster", "pacifico",
+    "vivaldi", "edwardian script itc", "monotype corsiva", "freestyle script",
+    "bradley hand itc", "chiller", "jokerman", "magneto", "curlz mt",
+    "harrington", "mistral", "kunstler script", "blackadder itc", "vladimir script",
+    "french script mt", "rage italic", "segoe script", "papyrus",
+}
+
 
 def analyze_html(content: str) -> list[Finding]:
     findings = []
@@ -29,6 +37,7 @@ def analyze_html(content: str) -> list[Finding]:
     _check_contrast(soup, findings)
     _check_use_of_color(soup, findings)
     _check_justified(soup, findings)
+    _check_fonts(soup, findings)
     _check_viewport(soup, findings)
     _check_lang(soup, findings)
     _check_tables(soup, findings)
@@ -394,6 +403,36 @@ def _check_justified(soup, findings):
                   "text — justification creates uneven spacing that is harder to read.",
             evidence="text-align: justify",
         ))
+
+
+def _check_fonts(soup, findings):
+    """CLEAR Easy to Read: prefer clean sans-serif fonts over decorative/script
+    faces. Scans inline font-family and <style> font-family declarations."""
+    families = []
+    for elem in soup.find_all(style=True):
+        fam = _style_props(elem.get("style", "")).get("font-family", "")
+        if fam:
+            families.append(fam)
+    for _sel, props in _stylesheet_rules(soup):
+        if props.get("font-family"):
+            families.append(props["font-family"])
+    seen = set()
+    for fam in families:
+        for token in fam.split(","):
+            clean = token.strip().strip("'\"")
+            name = clean.lower()
+            if name in _DECORATIVE_FONTS and name not in seen:
+                seen.add(name)
+                findings.append(Finding(
+                    strand="E",
+                    severity="tip",
+                    location="Stylesheet",
+                    issue=f'The font "{clean}" is decorative/script, which is hard to read. '
+                          f"CLEAR recommends clean sans-serif fonts such as Arial, Verdana, or Open Sans.",
+                    evidence=f"font-family: {fam[:60]}",
+                ))
+                if len(seen) >= 3:
+                    return
 
 
 def _check_viewport(soup, findings):

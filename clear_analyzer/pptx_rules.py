@@ -6,6 +6,16 @@ from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import PP_ALIGN
 from .models import Finding
 from .contrast import office_rgb, contrast_ratio, required_ratio, is_near
+from .theme import pptx_theme_map, resolve_pptx_run_color
+
+_DECORATIVE_FONTS = {
+    "brush script mt", "comic sans ms", "papyrus", "lobster", "pacifico",
+    "vivaldi", "edwardian script itc", "monotype corsiva", "freestyle script",
+    "bradley hand itc", "chiller", "jokerman", "magneto", "curlz mt",
+    "harrington", "mistral", "kunstler script", "blackadder itc", "vladimir script",
+    "french script mt", "rage italic", "segoe script",
+}
+_A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
 
 # Common image file extensions
 _IMAGE_EXT_RE = re.compile(
@@ -31,6 +41,7 @@ _WEAK_ALT_PATTERNS = [
 def analyze_pptx(file_bytes: bytes) -> list[Finding]:
     findings = []
     prs = Presentation(BytesIO(file_bytes))
+    theme_map = pptx_theme_map(prs)
 
     for slide_num, slide in enumerate(prs.slides, 1):
         loc = f"Slide {slide_num}"
@@ -40,44 +51,78 @@ def analyze_pptx(file_bytes: bytes) -> list[Finding]:
         _check_text(slide, loc, findings)
         _check_reading_order(slide, loc, findings)
         _check_justified(slide, loc, findings)
-        _check_text_contrast(slide, loc, findings)
+        _check_text_contrast(slide, loc, findings, theme_map)
+        _check_fonts(slide, loc, findings)
 
     return findings
 
 
-def _solid_rgb(fill):
-    """Return an explicit solid-fill RGB for a fill, or None if it's themed,
-    gradient, picture, or otherwise not a concrete RGB we can evaluate."""
+def _check_fonts(slide, loc, findings):
+    """CLEAR Easy to Read: clean sans-serif fonts beat decorative/script faces."""
+    seen = set()
+    for shape in slide.shapes:
+        if not getattr(shape, "has_text_frame", False):
+            continue
+        for para in shape.text_frame.paragraphs:
+            for run in para.runs:
+                name = (run.font.name or "")
+                key = name.lower().strip()
+                if key in _DECORATIVE_FONTS and len(run.text.strip()) >= 3 and key not in seen:
+                    seen.add(key)
+                    findings.append(Finding(
+                        strand="E",
+                        severity="tip",
+                        location=loc,
+                        issue=f"The font \"{name}\" is decorative/script, which is hard to read. "
+                              f"CLEAR recommends clean sans-serif fonts such as Arial or Calibri.",
+                        evidence=run.text.strip()[:80],
+                    ))
+                    return
+
+
+def _solid_rgb(fill, theme_map=None):
+    """Return a solid-fill RGB for a fill, resolving theme colors when a
+    theme_map is supplied. None for gradient/picture/no fill."""
     try:
         from pptx.enum.dml import MSO_FILL
         if fill.type != MSO_FILL.SOLID:
             return None
-        return office_rgb(fill.fore_color.rgb)
+        fore = fill.fore_color
+        # Explicit RGB
+        try:
+            if fore.type is not None and fore.rgb is not None:
+                return office_rgb(fore.rgb)
+        except Exception:
+            pass
+        # Theme color: resolve via the fill's solidFill XML.
+        if theme_map:
+            fillEl = fill._xPr.find(f"{_A}solidFill") if hasattr(fill, "_xPr") else None
+            if fillEl is not None:
+                return resolve_pptx_run_color(fill._xPr, theme_map)
     except Exception:
         return None
+    return None
 
 
-def _slide_bg_rgb(slide):
-    """Best-effort: the slide's own solid background fill, if explicitly set."""
+def _slide_bg_rgb(slide, theme_map):
+    """The slide's own solid background fill (explicit or themed), if set."""
     try:
-        bg = slide.background
-        return _solid_rgb(bg.fill)
+        return _solid_rgb(slide.background.fill, theme_map)
     except Exception:
         return None
 
 
-def _check_text_contrast(slide, loc, findings):
-    """WCAG 1.4.3 for slides. Contrast on slides is genuinely hard because
-    backgrounds are often theme- or layout-driven; to stay false-positive-free
-    we ONLY evaluate a run when BOTH its font color AND the background behind it
-    (the shape's own solid fill, else the slide's solid background) are explicit
-    RGB values. Themed colors are skipped rather than guessed."""
-    slide_bg = _slide_bg_rgb(slide)
+def _check_text_contrast(slide, loc, findings, theme_map):
+    """WCAG 1.4.3 for slides. Now resolves THEME colors (incl. light tints) on
+    both text and fills, so light theme text — the common real-world case — is
+    caught. We still require a determinable background (shape solid fill, else
+    slide background); when neither is set we skip rather than guess the master."""
+    slide_bg = _slide_bg_rgb(slide, theme_map)
     flagged = 0
     for shape in slide.shapes:
         if flagged >= 3 or not getattr(shape, "has_text_frame", False):
             continue
-        shape_bg = _solid_rgb(shape.fill) if hasattr(shape, "fill") else None
+        shape_bg = _solid_rgb(shape.fill, theme_map) if hasattr(shape, "fill") else None
         bg = shape_bg or slide_bg
         if bg is None:
             continue
@@ -85,10 +130,8 @@ def _check_text_contrast(slide, loc, findings):
             for run in para.runs:
                 if not run.text.strip():
                     continue
-                try:
-                    fg = office_rgb(run.font.color.rgb) if run.font.color and run.font.color.type is not None else None
-                except Exception:
-                    fg = None
+                rPr = run._r.find(f"{_A}rPr")
+                fg = resolve_pptx_run_color(rPr, theme_map)
                 if fg is None:
                     continue
                 size = run.font.size.pt if run.font.size else None
