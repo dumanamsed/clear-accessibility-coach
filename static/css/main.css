@@ -487,6 +487,67 @@ textarea:focus {
     50% { transform: scale(1.6); opacity: 0.55; }
 }
 
+/* ---------- In-progress banner (unmissable) ---------- */
+.progress-banner {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: linear-gradient(135deg, var(--welcome-orange), #C2410C);
+    color: #fff;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    padding: 16px 20px;
+    margin-bottom: 18px;
+}
+.progress-banner-row { display: flex; align-items: center; gap: 14px; }
+.progress-banner-title { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em; }
+.progress-banner-sub { font-size: 0.86rem; opacity: 0.95; margin-top: 2px; line-height: 1.45; }
+.progress-spinner {
+    width: 26px; height: 26px; flex-shrink: 0;
+    border: 3px solid rgba(255,255,255,0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+.progress-bar {
+    margin-top: 12px;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.3);
+    overflow: hidden;
+}
+.progress-bar span {
+    display: block;
+    height: 100%;
+    width: 40%;
+    border-radius: 999px;
+    background: #fff;
+    animation: indeterminate 1.3s ease-in-out infinite;
+}
+@keyframes indeterminate {
+    0% { margin-left: -40%; }
+    100% { margin-left: 100%; }
+}
+/* While pending, the preliminary results are visibly de-emphasized so they
+   don't read as a finished verdict. The banner above stays full-strength. */
+#report-screen.is-pending .strand-dashboard,
+#report-screen.is-pending .strand-card,
+#report-screen.is-pending .media-panel,
+#report-screen.is-pending .encouragement-card,
+#report-screen.is-pending .report-actions {
+    opacity: 0.45;
+    filter: saturate(0.6);
+    pointer-events: none;
+    transition: opacity 0.3s var(--ease);
+}
+#report-screen.is-pending .report-header {
+    outline: 2px dashed var(--welcome-orange);
+    outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .progress-bar span { animation: none; width: 100%; }
+}
+
 /* ---------- Strand dashboard chips ---------- */
 .strand-dashboard {
     display: grid;
@@ -687,6 +748,30 @@ textarea:focus {
     background: var(--mc-blue);
     -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.5.4.8 1 .9 1.6h6.2c.1-.6.4-1.2.9-1.6A7 7 0 0 0 12 2z'/%3E%3C/svg%3E") center/contain no-repeat;
     mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.5.4.8 1 .9 1.6h6.2c.1-.6.4-1.2.9-1.6A7 7 0 0 0 12 2z'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+
+.manual-checks {
+    margin-top: 14px;
+    background: rgba(81, 35, 127, 0.04);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px 14px;
+}
+.manual-checks summary {
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--primary);
+    padding: 8px 0;
+    list-style-position: inside;
+}
+.manual-checks summary:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 4px; }
+.manual-checks ul { margin: 4px 0 12px 4px; padding-left: 20px; }
+.manual-checks li {
+    font-size: 0.86rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 6px;
 }
 
 .strand-learn-more { font-size: 0.85rem; margin-top: 14px; }

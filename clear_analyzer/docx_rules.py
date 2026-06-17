@@ -6,6 +6,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from .models import Finding
 from .contrast import contrast_ratio, required_ratio, is_near
 from .theme import docx_theme_map, resolve_docx_color, docx_cell_fill
+from .altq import alt_quality_findings
 
 # Fonts CLEAR's "Easy to Read" calls out as hard to read: decorative/script
 # faces, and a few notoriously low-legibility display fonts. Sans-serif body
@@ -336,6 +337,8 @@ def _evaluate_alt_text(img, location, findings):
             issue="Image alt text appears to be generic or auto-generated. Consider a description of what the image conveys.",
             evidence=f"Image: {name}, alt text: \"{alt}\"",
         ))
+    else:
+        findings.extend(alt_quality_findings(alt, location))
 
 
 def _check_images(doc, findings):

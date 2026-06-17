@@ -2,6 +2,7 @@ import re
 from bs4 import BeautifulSoup
 from .models import Finding
 from .contrast import parse_color, contrast_ratio, required_ratio
+from .altq import alt_quality_findings
 
 _IMAGE_EXT_RE = re.compile(
     r"^.+\.(png|jpg|jpeg|gif|bmp|tiff|tif|svg|webp|ico|emf|wmf)$",
@@ -42,8 +43,61 @@ def analyze_html(content: str) -> list[Finding]:
     _check_lang(soup, findings)
     _check_tables(soup, findings)
     _check_empty_links(soup, findings)
+    _check_fixed_width(soup, findings)
+    _check_skip_link(soup, findings)
 
     return findings
+
+
+def _check_skip_link(soup, findings):
+    """CLEAR Logical Layout: 'Skip links are present where applicable' (WCAG
+    2.4.1 Bypass Blocks). 'Applicable' = the page has a <nav> to skip past; we
+    only flag when navigation exists but no in-page skip anchor does."""
+    if not soup.find("nav"):
+        return
+    has_skip = False
+    for a in soup.find_all("a", href=True):
+        if a["href"].startswith("#") and "skip" in a.get_text(strip=True).lower():
+            has_skip = True
+            break
+    if not has_skip:
+        findings.append(Finding(
+            strand="L",
+            severity="tip",
+            location="Navigation",
+            issue="The page has navigation but no \"skip to main content\" link. A skip link lets "
+                  "keyboard and screen-reader users bypass repeated navigation (WCAG 2.4.1).",
+            evidence="Add <a href=\"#main-content\" class=\"skip-link\">Skip to main content</a> as the first focusable element.",
+        ))
+
+
+def _check_fixed_width(soup, findings):
+    """CLEAR Responsive Design: 'Fixed-width layouts are avoided.' Flags wide
+    fixed pixel widths on containers/tables/images that force horizontal
+    scrolling on phones (relates to WCAG 1.4.10 Reflow)."""
+    flagged = 0
+    # Inline width:NNNpx on block containers, or legacy width="NNN" on table/img.
+    for elem in soup.find_all(["div", "table", "section", "main", "article", "img"]):
+        if flagged >= 3:
+            break
+        w = None
+        style = elem.get("style", "")
+        m = re.search(r"(?:^|;|\s)width\s*:\s*(\d+)\s*px", style, re.IGNORECASE)
+        if m:
+            w = int(m.group(1))
+        elif elem.get("width", "").isdigit():
+            w = int(elem.get("width"))
+        if w is not None and w >= 700:
+            flagged += 1
+            findings.append(Finding(
+                strand="R",
+                severity="tip",
+                location=f"<{elem.name}>",
+                issue=f"Fixed width of {w}px can force horizontal scrolling on phones and breaks "
+                      f"reflow (WCAG 1.4.10). CLEAR recommends fluid widths (%, max-width) over "
+                      f"fixed pixels.",
+                evidence=(style[:70] or f'width="{elem.get("width")}"'),
+            ))
 
 
 def _check_lang(soup, findings):
@@ -137,6 +191,8 @@ def _check_images(soup, findings):
                 issue="Image alt text appears to be generic or auto-generated. Consider a description of what the image conveys.",
                 evidence=f"alt=\"{alt.strip()}\", src=\"{src}\"",
             ))
+        else:
+            findings.extend(alt_quality_findings(alt, f"Image {i}"))
 
 
 def _check_headings(soup, findings):

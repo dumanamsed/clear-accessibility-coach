@@ -7,6 +7,7 @@ from pptx.enum.text import PP_ALIGN
 from .models import Finding
 from .contrast import office_rgb, contrast_ratio, required_ratio, is_near
 from .theme import pptx_theme_map, resolve_pptx_run_color
+from .altq import alt_quality_findings
 
 _DECORATIVE_FONTS = {
     "brush script mt", "comic sans ms", "papyrus", "lobster", "pacifico",
@@ -322,6 +323,8 @@ def _check_shape_for_image(shape, loc, findings, seen_shapes):
             issue="Image alt text appears to be generic or auto-generated. Consider a description of what the image conveys.",
             evidence=f"Shape: {name}, alt text: \"{alt_text}\"",
         ))
+    else:
+        findings.extend(alt_quality_findings(alt_text, loc))
 
 
 def _check_title(slide, loc, findings):

@@ -7,12 +7,14 @@ from werkzeug.utils import secure_filename
 import config
 from clear_analyzer.models import Finding
 from clear_analyzer.citations import (
-    STRAND_DEFINITIONS, PRESSBOOK_LINKS, FRAMEWORK_CITATION, STRAND_ORDER
+    STRAND_DEFINITIONS, PRESSBOOK_LINKS, FRAMEWORK_CITATION, STRAND_ORDER,
+    MANUAL_CHECKS,
 )
 from clear_analyzer.pptx_rules import analyze_pptx
 from clear_analyzer.docx_rules import analyze_docx
 from clear_analyzer.pdf_rules import analyze_pdf
 from clear_analyzer.html_rules import analyze_html, analyze_text
+from clear_analyzer.readability import analyze_readability
 from clear_analyzer.claude_review import run_claude_review
 
 app = Flask(__name__)
@@ -129,6 +131,7 @@ def export_pdf():
         strand_definitions=STRAND_DEFINITIONS,
         strand_order=STRAND_ORDER,
         pressbook_links=PRESSBOOK_LINKS,
+        manual_checks=MANUAL_CHECKS,
         framework_citation=FRAMEWORK_CITATION,
         ctl_email=config.CTL_CONTACT_EMAIL,
         is_pdf=True,
@@ -194,6 +197,10 @@ def _analyze_file(file_bytes, ext):
         findings = analyze_text(content)
         body_sample = content[:2000]
         file_type = "text"
+
+    # CLEAR "Easy to Read" readability scoring (Flesch / sentence length) runs on
+    # the extracted prose, independent of file type.
+    findings = findings + analyze_readability(body_sample)
 
     return findings, outline, alt_texts, body_sample, file_type
 

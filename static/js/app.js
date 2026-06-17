@@ -14,6 +14,16 @@
         R: { name: "Responsive Design", definition: "Designing for learning across devices: content that flows cleanly on phones and laptops alike, resizes properly, and avoids images of text. Device access is equity access.", link: "https://pressbooks.montgomerycollege.edu/clear/part/r-responsive-design/", color: "#B82A91", ink: "#B82A91" }
     };
     var STRAND_ORDER = ["C", "L", "E", "A", "R"];
+
+    // CLEAR self-assessment items an automated tool can't verify from a file —
+    // shown per strand so the full requirement set stays visible.
+    var MANUAL_CHECKS = {
+        C: ["Captions are accurate and edited for clarity, spelling, and timing — not just auto-generated.", "Audio-only content (podcasts, narration) has a transcript.", "Meaningful non-speech audio (music, sound effects) is described, and speakers are identified.", "Live sessions include captions when possible."],
+        L: ["Reading and focus order follow a logical, intuitive path.", "Everything is operable by keyboard alone, and the keyboard focus indicator is visible.", "Interactive elements meet the 24×24 px minimum target size.", "Any drag-based interaction has a non-drag alternative."],
+        E: ["Text can be resized to 200% without losing content or breaking layout.", "Information is never conveyed by color alone (also use text, icons, or labels).", "A dark-mode or high-contrast option is offered where the platform supports it."],
+        A: ["Each description conveys the image's purpose and meaning, not just its appearance.", "Charts, graphs, and infographics have a text summary or extended description of the data.", "Purely decorative images are intentionally marked decorative so screen readers skip them."],
+        R: ["Tested on multiple devices — desktop, tablet, and phone.", "Content reflows with no horizontal scrolling on small screens.", "Links and buttons are easy to see and tap on touch screens.", "Shared in accessible formats (structured Word, tagged PDF)."]
+    };
     var FRAMEWORK_CITATION = "Grounded in the CLEAR Framework by Dr. Paul D. Miller, Ed.D., Montgomery College Center for Teaching and Learning.";
 
     var ANALYZING_MESSAGES = [
@@ -188,12 +198,12 @@
                 if (result.claude_available && result.findings.length) {
                     mergeAiFindings(result.findings);
                     aiState = "done";
-                    announcement = result.findings.length + " AI coaching suggestion" + (result.findings.length !== 1 ? "s" : "") + " added to the report.";
+                    announcement = "Review complete. " + result.findings.length + " AI coaching suggestion" + (result.findings.length !== 1 ? "s" : "") + " added to the report.";
                 } else {
                     aiState = result.claude_available ? "done" : "unavailable";
                     announcement = result.claude_available
-                        ? "AI review finished with no additional suggestions."
-                        : "AI suggestions were not available. The report shows automated rule checks only.";
+                        ? "Review complete. No additional AI suggestions."
+                        : "Review complete. AI suggestions were not available; the report shows automated rule checks only.";
                 }
                 rerenderPreservingContext(announcement);
             })
@@ -292,7 +302,24 @@
     function renderReport(data) {
         if (messageInterval) { clearInterval(messageInterval); messageInterval = null; }
         var container = document.getElementById("report-screen");
+        var pending = aiState === "pending";
+        // Class on the container drives the "dim the preliminary results" CSS.
+        container.className = pending ? "is-pending" : "";
         var html = [];
+
+        // Unmissable in-progress banner: sticks to the top of the report and
+        // visually dominates so a still-loading report can never be mistaken
+        // for a finished "no issues" verdict.
+        if (pending) {
+            html.push('<div class="progress-banner" role="status" aria-live="assertive">');
+            html.push('<div class="progress-banner-row">');
+            html.push('<span class="progress-spinner" aria-hidden="true"></span>');
+            html.push('<div><div class="progress-banner-title">Review still in progress — not final yet</div>');
+            html.push('<div class="progress-banner-sub">The AI coaching review is still scanning your file. Please wait for the “Review complete” message before assuming your file is clear.</div></div>');
+            html.push('</div>');
+            html.push('<div class="progress-bar" aria-hidden="true"><span></span></div>');
+            html.push('</div>');
+        }
 
         // Header
         html.push('<div class="report-header">');
@@ -301,20 +328,18 @@
         // While the AI pass is running, the numbers are preliminary — phrase
         // them that way so an early "0 items" doesn't read as a final verdict.
         var summaryText;
-        if (aiState === "pending") {
+        if (pending) {
             summaryText = data.total_findings === 0
-                ? "Automated checks passed — AI coaching review in progress…"
-                : data.total_findings + " item" + (data.total_findings !== 1 ? "s" : "") + " found so far — AI coaching review in progress…";
+                ? "Preliminary checks passed — still reviewing…"
+                : data.total_findings + " item" + (data.total_findings !== 1 ? "s" : "") + " found so far — still reviewing…";
         } else if (data.total_findings === 0) {
-            summaryText = "No issues found across all 5 CLEAR strands. Nice work!";
+            summaryText = "Review complete: no issues found across all 5 CLEAR strands. Nice work!";
         } else {
-            summaryText = data.total_findings + " item" + (data.total_findings !== 1 ? "s" : "") + " to review across " + data.strands_with_findings + " of 5 CLEAR strands.";
+            summaryText = "Review complete: " + data.total_findings + " item" + (data.total_findings !== 1 ? "s" : "") + " to review across " + data.strands_with_findings + " of 5 CLEAR strands.";
         }
         html.push('<p class="report-summary">' + summaryText + '</p>');
         html.push('<p class="report-citation">' + FRAMEWORK_CITATION + '</p>');
-        if (aiState === "pending") {
-            html.push('<p class="report-claude-notice ai-pending" role="status"><span class="ai-pulse" aria-hidden="true"></span>AI coaching suggestions are being generated — they will appear below shortly.</p>');
-        } else if (aiState === "unavailable" || aiState === "disabled") {
+        if (!pending && (aiState === "unavailable" || aiState === "disabled")) {
             html.push('<p class="report-claude-notice">AI-powered suggestions were not available for this analysis. Results are based on automated rule checks only.</p>');
         }
         html.push('</div>');
@@ -397,6 +422,13 @@
                 });
             }
 
+            // Manual CLEAR checklist — requirements the tool can't auto-verify.
+            var checks = MANUAL_CHECKS[key] || [];
+            if (checks.length) {
+                html.push('<details class="manual-checks"><summary>Also verify yourself (CLEAR checklist the tool can’t auto-check)</summary><ul>');
+                checks.forEach(function (c) { html.push('<li>' + escapeHtml(c) + '</li>'); });
+                html.push('</ul></details>');
+            }
             html.push('<p class="strand-learn-more"><a href="' + info.link + '" target="_blank" rel="noopener">Learn more about ' + info.name + ' in the CLEAR Pressbook</a></p>');
             html.push('</div>');
             html.push('</section>');

@@ -37,6 +37,10 @@
         .severity-badge.warning { background: #FDEEE7; color: #C2410C; }
         .severity-badge.tip { background: #E3F5F2; color: #0A7065; }
         .strand-counts { margin-bottom: 10px; }
+        .manual-checks { margin-top: 10px; background: #F6F5F9; border: 1px solid #E8E5EE; border-radius: 6px; padding: 8px 12px; page-break-inside: avoid; }
+        .manual-checks-title { font-size: 8.5pt; font-weight: 700; color: #51237F; margin-bottom: 4px; }
+        .manual-checks ul { margin: 0 0 0 16px; padding: 0; }
+        .manual-checks li { font-size: 8.5pt; color: #5A5568; margin-bottom: 3px; }
         .learn-more { font-size: 8.5pt; margin-top: 8px; }
         .learn-more a { color: #51237F; text-decoration: none; font-weight: 600; }
         .no-findings { color: #0A7065; font-style: italic; padding: 6px 0; }
@@ -102,6 +106,15 @@
             {% endif %}
         </article>
         {% endfor %}
+        {% endif %}
+
+        {% if manual_checks and manual_checks[strand_key] %}
+        <div class="manual-checks">
+            <div class="manual-checks-title">Also verify yourself (CLEAR checklist the tool can't auto-check):</div>
+            <ul>
+                {% for item in manual_checks[strand_key] %}<li>{{ item }}</li>{% endfor %}
+            </ul>
+        </div>
         {% endif %}
 
         <p class="learn-more"><a href="{{ pressbook_links[strand_key] }}">Learn more about {{ info.name }} in the CLEAR Pressbook</a></p>

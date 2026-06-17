@@ -52,6 +52,41 @@ STRAND_DEFINITIONS = {
 
 PRESSBOOK_LINKS = {strand: info["link"] for strand, info in STRAND_DEFINITIONS.items()}
 
+# Requirements from each strand's CLEAR self-assessment checklist that an
+# automated tool CANNOT verify from a file alone (they need human judgment or
+# live testing). Surfacing them keeps the full CLEAR requirement set visible so
+# faculty don't mistake "no automated findings" for "fully accessible."
+MANUAL_CHECKS = {
+    "C": [
+        "Captions are accurate and edited for clarity, spelling, and timing — not just auto-generated.",
+        "Audio-only content (podcasts, narration) has a transcript.",
+        "Meaningful non-speech audio (music, sound effects) is described, and speakers are identified.",
+        "Live sessions include captions when possible.",
+    ],
+    "L": [
+        "Reading and focus order follow a logical, intuitive path.",
+        "Everything is operable by keyboard alone, and the keyboard focus indicator is visible.",
+        "Interactive elements meet the 24×24 px minimum target size.",
+        "Any drag-based interaction has a non-drag alternative.",
+    ],
+    "E": [
+        "Text can be resized to 200% without losing content or breaking layout.",
+        "Information is never conveyed by color alone (also use text, icons, or labels).",
+        "A dark-mode or high-contrast option is offered where the platform supports it.",
+    ],
+    "A": [
+        "Each description conveys the image's purpose and meaning, not just its appearance.",
+        "Charts, graphs, and infographics have a text summary or extended description of the data.",
+        "Purely decorative images are intentionally marked decorative so screen readers skip them.",
+    ],
+    "R": [
+        "Tested on multiple devices — desktop, tablet, and phone.",
+        "Content reflows with no horizontal scrolling on small screens.",
+        "Links and buttons are easy to see and tap on touch screens.",
+        "Shared in accessible formats (structured Word, tagged PDF).",
+    ],
+}
+
 FRAMEWORK_CITATION = (
     "Grounded in the CLEAR Framework by Dr. Paul D. Miller, Ed.D., "
     "Montgomery College Center for Teaching and Learning."
